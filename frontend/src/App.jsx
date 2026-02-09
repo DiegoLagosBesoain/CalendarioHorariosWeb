@@ -1,22 +1,27 @@
-import { useEffect, useState } from "react";
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { AuthPage } from './pages/AuthPage';
+import { DashboardsPage } from './pages/DashboardsPage';
+import './App.css';
 
 function App() {
-  const [mensaje, setMensaje] = useState("");
-
-  useEffect(() => {
-    fetch("http://localhost:3000/api/sheets/ping")
-      .then(res => res.json())
-      .then(data => {
-        console.log("Respuesta backend:", data);
-        setMensaje(data.appscript);
-      });
-  }, []);
-
   return (
-    <div>
-      <h1>React + Express</h1>
-      <p>{mensaje}</p>
-    </div>
+    <AuthProvider>
+      <Routes>
+        <Route path="/auth" element={<AuthPage />} />
+        <Route
+          path="/dashboards"
+          element={
+            <ProtectedRoute>
+              <DashboardsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/" element={<Navigate to="/dashboards" replace />} />
+        <Route path="*" element={<Navigate to="/dashboards" replace />} />
+      </Routes>
+    </AuthProvider>
   );
 }
 

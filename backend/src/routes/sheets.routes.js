@@ -18,5 +18,20 @@ router.get("/ping", async (req, res) => {
     });
   }
 });
+router.get("/master.list", async (req, res) => {
+  try {
+    const result = await callAppScript("master.list");
+
+    res.json({
+      ok: true,
+      appscript: result
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
 
 export default router;

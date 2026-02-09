@@ -3,13 +3,16 @@
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
-    "googleapis": "^171.4.0"
+    "googleapis": "^171.4.0",
+    "pg": "^8.18.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"
   },
   "type": "module",
   "scripts": {
-    "dev": "nodemon index.js"
-  }
+  "dev": "nodemon index.js",
+  "db:init": "node src/db/init.js && nodemon index.js",
+  "db:reset": "node src/db/reset.js && nodemon index.js"
+}
 }
