@@ -5,6 +5,7 @@ import healthRoutes from "./src/routes/health.routes.js";
 import authRoutes from "./src/routes/auth.routes.js";
 import usersRoutes from "./src/routes/users.routes.js";
 import dashboardsRoutes from "./src/routes/dashboards.routes.js";
+import horasRegistradasRoutes from "./src/routes/horas-registradas.routes.js";
 
 const app = express();
 
@@ -23,6 +24,9 @@ app.use("/api/users", usersRoutes);
 
 // Dashboards
 app.use("/api/dashboards", dashboardsRoutes);
+
+// Horas Registradas
+app.use("/api/horas-registradas", horasRegistradasRoutes);
 
 // Legacy routes
 app.use("/api/sheets", sheetsRoutes);

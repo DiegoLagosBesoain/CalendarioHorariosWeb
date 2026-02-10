@@ -1,5 +1,10 @@
 import express from "express";
 import { callAppScript } from "../services/appscript.service.js";
+import {
+  procesarMaestrosYCrearHorarios,
+  obtenerHorariosProgramables,
+  limpiarHorariosProgramables,
+} from "../services/maestros.service.js";
 
 const router = express.Router();
 
@@ -9,27 +14,117 @@ router.get("/ping", async (req, res) => {
 
     res.json({
       ok: true,
-      appscript: result
+      appscript: result,
     });
   } catch (err) {
     res.status(500).json({
       ok: false,
-      error: err.message
+      error: err.message,
     });
   }
 });
+
 router.get("/master.list", async (req, res) => {
   try {
-    const result = await callAppScript("master.list");
+    const result = await callAppScript("maestro.listar");
 
     res.json({
       ok: true,
-      appscript: result
+      appscript: result,
     });
   } catch (err) {
     res.status(500).json({
       ok: false,
-      error: err.message
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * POST /api/sheets/load-maestros
+ * Carga los maestros desde Google Sheets y crea los horarios programables
+ */
+router.post("/load-maestros", async (req, res) => {
+  try {
+    // Obtener datos de maestro.listar
+    const resultString = await callAppScript("maestro.listar");
+
+    // Parsear el JSON string
+    let maestrosData;
+    try {
+      maestrosData = JSON.parse(resultString);
+    } catch (parseError) {
+      return res.status(400).json({
+        ok: false,
+        error: "Error parseando JSON de maestros",
+        details: parseError.message,
+      });
+    }
+
+    // Validar que sea un array
+    if (!Array.isArray(maestrosData)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Los datos de maestros no son un array",
+      });
+    }
+
+    // Procesar y crear horarios
+    const horariosCreados = await procesarMaestrosYCrearHorarios(maestrosData);
+
+    res.json({
+      ok: true,
+      mensaje: `Se cargaron ${horariosCreados.length} horarios programables`,
+      horariosCreados,
+    });
+  } catch (err) {
+    console.error("Error en load-maestros:", err);
+    res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * GET /api/sheets/horas-programables
+ * Obtiene todos los horarios programables creados
+ */
+router.get("/horas-programables", async (req, res) => {
+  try {
+    const horarios = await obtenerHorariosProgramables();
+
+    res.json({
+      ok: true,
+      cantidad: horarios.length,
+      horarios,
+    });
+  } catch (err) {
+    console.error("Error en horas-programables:", err);
+    res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/sheets/horas-programables
+ * Limpia todos los horarios programables (para reload)
+ */
+router.delete("/horas-programables", async (req, res) => {
+  try {
+    const cantidad = await limpiarHorariosProgramables();
+
+    res.json({
+      ok: true,
+      mensaje: `Se eliminaron ${cantidad} horarios programables`,
+    });
+  } catch (err) {
+    console.error("Error limpiando horas-programables:", err);
+    res.status(500).json({
+      ok: false,
+      error: err.message,
     });
   }
 });

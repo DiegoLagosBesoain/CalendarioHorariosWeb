@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS salas (
 -- Almacena los profesores y sus disponibilidades
 CREATE TABLE IF NOT EXISTS profesores (
     id SERIAL PRIMARY KEY,
-    nombre VARCHAR(255) NOT NULL,
+    rut VARCHAR(20) NOT NULL UNIQUE,
+    nombre VARCHAR(255),
     disponibilidades JSON DEFAULT '{}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -48,10 +49,12 @@ CREATE TABLE IF NOT EXISTS profesores (
 -- Template/Plantilla de horas que pueden ser programadas
 -- especialidades_semestres: JSON array con [{nombre: string, semestre: integer}, ...]
 CREATE TABLE IF NOT EXISTS horas_programables (
+
     id SERIAL PRIMARY KEY,
-    codigo VARCHAR(50) NOT NULL UNIQUE,
+    codigo VARCHAR(50) NOT NULL,
     seccion VARCHAR(50) NOT NULL,
     tipo_hora VARCHAR(100) NOT NULL,
+    titulo VARCHAR(255),
     cantidad_horas INTEGER NOT NULL,
     profesor_1_id INTEGER,
     profesor_2_id INTEGER,
@@ -60,6 +63,7 @@ CREATE TABLE IF NOT EXISTS horas_programables (
     sala_especial VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_horas_prog_codigo_seccion_tipo UNIQUE (codigo, seccion, tipo_hora),
     CONSTRAINT fk_horas_prog_prof1 FOREIGN KEY (profesor_1_id) REFERENCES profesores(id) ON DELETE SET NULL,
     CONSTRAINT fk_horas_prog_prof2 FOREIGN KEY (profesor_2_id) REFERENCES profesores(id) ON DELETE SET NULL,
     CONSTRAINT fk_horas_prog_sala FOREIGN KEY (sala_id) REFERENCES salas(id) ON DELETE SET NULL

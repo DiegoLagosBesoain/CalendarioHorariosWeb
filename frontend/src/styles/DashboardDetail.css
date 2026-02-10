@@ -1,0 +1,334 @@
+/* Dashboard Detail Page Styles */
+.dashboard-detail-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.dashboard-detail-header {
+  background: white;
+  padding: 20px 30px;
+  border-radius: 10px;
+  margin-bottom: 30px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-detail-header h1 {
+  margin: 10px 0 5px 0;
+  color: #333;
+  font-size: 32px;
+}
+
+.dashboard-detail-header p {
+  margin: 0;
+  color: #999;
+  font-size: 14px;
+}
+
+.back-btn {
+  padding: 8px 16px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  color: #333;
+  font-weight: 600;
+  transition: background 0.3s;
+  margin-bottom: 10px;
+  display: inline-block;
+}
+
+.back-btn:hover {
+  background: #e0e0e0;
+}
+
+.dashboard-detail-main {
+  margin-bottom: 30px;
+  width: 100%;
+}
+
+.dashboard-detail-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.dashboard-detail-right {
+  width: 360px;
+}
+
+.dashboard-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+  background: white;
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.load-data-btn {
+  padding: 12px 24px;
+  background: #51cf66;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.3s, transform 0.2s;
+}
+
+.load-data-btn:hover:not(:disabled) {
+  background: #40c057;
+  transform: translateY(-2px);
+}
+
+.load-data-btn:disabled {
+  background: #a8d0a8;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.delete-data-btn {
+  padding: 12px 24px;
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.3s, transform 0.2s;
+}
+
+.delete-data-btn:hover:not(:disabled) {
+  background: #ff5252;
+  transform: translateY(-2px);
+}
+
+.delete-data-btn:disabled {
+  background: #ffb3b3;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.datos-resultado {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 30px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.datos-resultado h2 {
+  margin-top: 0;
+  color: #333;
+  border-bottom: 2px solid #51cf66;
+  padding-bottom: 10px;
+}
+
+.datos-resultado pre {
+  background: #f5f5f5;
+  padding: 15px;
+  border-radius: 5px;
+  overflow: auto;
+  max-height: 400px;
+  font-size: 12px;
+  border-left: 4px solid #51cf66;
+}
+
+/* Horarios Programables Table Styles */
+.horarios-programables-section {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 30px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.horarios-programables-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 3px solid #51cf66;
+}
+
+.horarios-programables-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.toggle-tabla-btn {
+  padding: 8px 16px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #666;
+  transition: all 0.3s;
+  font-size: 12px;
+}
+
+.toggle-tabla-btn:hover {
+  background: #e8e8e8;
+  border-color: #999;
+}
+
+.horarios-tabla {
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+}
+
+.horarios-tabla table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.horarios-tabla th {
+  background: #f8f9fa;
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #667eea;
+}
+
+.horarios-tabla td {
+  padding: 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.horarios-tabla tr:hover {
+  background: #f9f9f9;
+}
+
+.horarios-tabla .codigo {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.horarios-tabla .titulo {
+  font-weight: 600;
+  color: #333;
+}
+
+.horarios-tabla .seccion {
+  text-align: center;
+  font-weight: 600;
+}
+
+.horarios-tabla .tipo {
+  text-align: center;
+}
+
+.tipo-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tipo-badge.clase {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.tipo-badge.ayudantia {
+  background: #ffe8cc;
+  color: #e65100;
+}
+
+.tipo-badge.lab-taller {
+  background: #e8d5f5;
+  color: #6a1b9a;
+}
+
+.horarios-tabla .cantidad {
+  text-align: center;
+  font-weight: 600;
+  color: #333;
+}
+
+.horarios-tabla .especialidades {
+  color: #666;
+  font-size: 13px;
+}
+
+.horarios-tabla .profesores {
+  text-align: center;
+}
+
+.prof-list {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.prof-1,
+.prof-2 {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.prof-2 {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.sin-profesor {
+  color: #999;
+  font-style: italic;
+}
+
+.horarios-tabla .fecha {
+  color: #999;
+  font-size: 13px;
+}
+
+.error-message {
+  background: #fee;
+  color: #c33;
+  padding: 15px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  text-align: center;
+  border-left: 4px solid #c33;
+}
+
+.dashboard-detail-container button[type="button"]:not(.back-btn) {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.2s;
+}
+
+.dashboard-detail-container button[type="button"]:not(.back-btn):hover {
+  transform: translateY(-2px);
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: white;
+  font-size: 18px;
+}

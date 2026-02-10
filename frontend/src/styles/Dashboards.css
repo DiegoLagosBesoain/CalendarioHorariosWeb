@@ -109,6 +109,15 @@
   word-break: break-word;
 }
 
+.dashboard-title {
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.dashboard-title:hover {
+  color: #667eea;
+}
+
 .dashboard-date {
   margin: 0 0 15px 0;
   color: #999;
@@ -132,6 +141,23 @@
   font-weight: 600;
   font-size: 13px;
   transition: background 0.3s;
+}
+
+.open-btn {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: background 0.3s;
+  background: #51cf66;
+  color: white;
+}
+
+.open-btn:hover {
+  background: #40c057;
 }
 
 .edit-btn {

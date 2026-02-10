@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { dashboardService } from '../services/api';
 import '../styles/Dashboards.css';
 
 export function DashboardsPage() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [dashboards, setDashboards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -36,6 +38,7 @@ export function DashboardsPage() {
       const newDashboard = await dashboardService.createDashboard(newDashboardName, user.id);
       setDashboards([...dashboards, newDashboard]);
       setNewDashboardName('');
+      setError('');
     } catch (err) {
       setError(err.message);
     }
@@ -70,6 +73,10 @@ export function DashboardsPage() {
   const startEdit = (dashboard) => {
     setEditingId(dashboard.id);
     setEditName(dashboard.nombre);
+  };
+
+  const handleDashboardClick = (dashboardId) => {
+    navigate(`/dashboards/${dashboardId}`);
   };
 
   return (
@@ -119,11 +126,19 @@ export function DashboardsPage() {
                 </div>
               ) : (
                 <>
-                  <h3>{dashboard.nombre}</h3>
+                  <h3 onClick={() => handleDashboardClick(dashboard.id)} className="dashboard-title">
+                    {dashboard.nombre}
+                  </h3>
                   <p className="dashboard-date">
                     Creado: {new Date(dashboard.created_at).toLocaleDateString()}
                   </p>
                   <div className="dashboard-actions">
+                    <button 
+                      onClick={() => handleDashboardClick(dashboard.id)} 
+                      className="open-btn"
+                    >
+                      Abrir
+                    </button>
                     <button 
                       onClick={() => startEdit(dashboard)} 
                       className="edit-btn"

@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardsPage } from './pages/DashboardsPage';
+import { DashboardDetailPage } from './pages/DashboardDetailPage';
 import './App.css';
 
 function App() {
@@ -15,6 +16,14 @@ function App() {
           element={
             <ProtectedRoute>
               <DashboardsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboards/:dashboardId"
+          element={
+            <ProtectedRoute>
+              <DashboardDetailPage />
             </ProtectedRoute>
           }
         />
