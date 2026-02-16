@@ -113,6 +113,28 @@
   opacity: 0.7;
 }
 
+.send-data-btn {
+  padding: 12px 24px;
+  background: #4c6ef5;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.3s, transform 0.2s;
+}
+
+.send-data-btn:hover:not(:disabled) {
+  background: #3d5ce6;
+  transform: translateY(-2px);
+}
+
+.send-data-btn:disabled {
+  background: #a4b7ff;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .datos-resultado {
   background: white;
   padding: 20px;

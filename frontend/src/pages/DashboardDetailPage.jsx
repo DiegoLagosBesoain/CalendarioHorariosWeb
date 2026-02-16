@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { dashboardService, sheetsService } from '../services/api';
+import { dashboardService, sheetsService, horasRegistradasService } from '../services/api';
 import { TimeTable } from '../components/TimeTable';
 import '../styles/DashboardDetail.css';
 
@@ -86,6 +86,28 @@ export function DashboardDetailPage() {
     }
   };
 
+  const handleEnviarDatos = async () => {
+    try {
+      setCargandoDatos(true);
+      setError('');
+      
+      // Enviar el diccionario de horas registradas a Google Sheets
+      const resultado = await horasRegistradasService.enviarDiccionarioAGoogleSheets(dashboardId);
+      
+      // Mostrar en consola
+      console.log('Respuesta de Google Sheets:');
+      console.log(resultado);
+      
+      alert('Datos enviados correctamente a Google Sheets');
+    } catch (err) {
+      setError(err.message);
+      console.error('Error al enviar datos:', err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setCargandoDatos(false);
+    }
+  };
+
   if (loading) {
     return <div className="loading">Cargando dashboard...</div>;
   }
@@ -120,13 +142,22 @@ export function DashboardDetailPage() {
           {cargandoDatos ? 'Cargando datos...' : 'Cargar Datos'}
         </button>
         {horariosProgramables.length > 0 && (
-          <button 
-            className="delete-data-btn" 
-            onClick={handleLimpiarDatos}
-            disabled={cargandoDatos}
-          >
-            Limpiar Datos
-          </button>
+          <>
+            <button 
+              className="delete-data-btn" 
+              onClick={handleLimpiarDatos}
+              disabled={cargandoDatos}
+            >
+              Limpiar Datos
+            </button>
+            <button 
+              className="send-data-btn" 
+              onClick={handleEnviarDatos}
+              disabled={cargandoDatos}
+            >
+              {cargandoDatos ? 'Procesando...' : 'Enviar Datos'}
+            </button>
+          </>
         )}
       </div>
 

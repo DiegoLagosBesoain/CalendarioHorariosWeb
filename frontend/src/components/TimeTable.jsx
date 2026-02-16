@@ -10,6 +10,145 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
   // placedItems: { [semestreId]: [ { id (BD), instanceId, hora_programable_id, codigo, seccion, titulo, tipo_hora, cantidad_horas, dia, bloqueIndex } ] }
   const [placedItems, setPlacedItems] = useState({});
   const [cargando, setCargando] = useState(false);
+  const [warnings, setWarnings] = useState([]);
+  const [conflictingPostits, setConflictingPostits] = useState(new Set());
+
+  // Función para marcar conflictos basados en los datos cargados de la BD
+  const marcarConflictosDelBD = (itemsAValidar) => {
+    try {
+      const nuevasAdvertencias = [];
+      const nuevosConflicting = new Set();
+
+      // Por cada semestre
+      Object.keys(itemsAValidar).forEach(semestreId => {
+        const horasDelSemestre = itemsAValidar[semestreId];
+
+        // Revisar cada hora para ver si tiene conflictos guardados
+        horasDelSemestre.forEach(pi => {
+          if (pi.conflictos && Array.isArray(pi.conflictos) && pi.conflictos.length > 0) {
+            // Para cada conflicto guardado
+            pi.conflictos.forEach(conflictId => {
+              // Buscar el postit conflictivo en todas las semestres
+              horasDelSemestre.forEach(pi2 => {
+                if (pi2.id === conflictId) {
+                  // Ambos postits tienen conflicto
+                  nuevosConflicting.add(pi.instanceId);
+                  nuevosConflicting.add(pi2.instanceId);
+                  
+                  // Crear mensaje de conflicto
+                  const msg = `⚠️ Conflicto de horario: ${pi.titulo} Sección ${pi.seccion} está tocando con ${pi2.titulo} Sección ${pi2.seccion}.`;
+                  if (!nuevasAdvertencias.includes(msg)) {
+                    nuevasAdvertencias.push(msg);
+                  }
+                }
+              });
+            });
+          }
+
+          // Revisar si tiene horario protegido
+          if (pi.hasProtectedScheduleWarning) {
+            nuevosConflicting.add(pi.instanceId);
+            const nombreTipoHorario = semestreId === 'plan_comun' ? 'Plan Común' : '5to y 6to';
+            const msg = `🔒 Horario Protegido: ${pi.titulo} Sección ${pi.seccion} está programado en una franja protegida de ${nombreTipoHorario}.`;
+            if (!nuevasAdvertencias.includes(msg)) {
+              nuevasAdvertencias.push(msg);
+            }
+          }
+        });
+      });
+
+      setWarnings(nuevasAdvertencias);
+      setConflictingPostits(nuevosConflicting);
+    } catch (err) {
+      console.error('Error marcando conflictos de BD:', err);
+    }
+  };
+
+  // Función para validar conflictos localmente (por bloque horario)
+  const validarConflictosLocal = (itemsAValidar) => {
+    try {
+      const nuevasAdvertencias = [];
+      const nuevosConflicting = new Set();
+
+      // Por cada semestre
+      Object.keys(itemsAValidar).forEach(semestreId => {
+        const horasDelSemestre = itemsAValidar[semestreId];
+
+        // Agrupar por bloque horario (día + bloqueIndex)
+        const bloques = {};
+        horasDelSemestre.forEach(pi => {
+          const blocKey = `${pi.dia}-${pi.bloqueIndex}`;
+          if (!bloques[blocKey]) {
+            bloques[blocKey] = [];
+          }
+          bloques[blocKey].push(pi);
+        });
+
+        // Revisar conflictos dentro de cada bloque horario
+        Object.values(bloques).forEach(horasEnBloque => {
+          for (let i = 0; i < horasEnBloque.length; i++) {
+            for (let j = i + 1; j < horasEnBloque.length; j++) {
+              const pi1 = horasEnBloque[i];
+              const pi2 = horasEnBloque[j];
+
+              // Saltar si mismo código (mismo curso, diferente sección)
+              if (pi1.codigo === pi2.codigo) continue;
+
+              // Obtener especialidades de ambos programables
+              const prog1 = horariosProgramables.find(p => p.id === pi1.hora_programable_id);
+              const prog2 = horariosProgramables.find(p => p.id === pi2.hora_programable_id);
+
+              if (!prog1 || !prog2) continue;
+
+              // Extraer semestres de especialidades
+              let esp1 = prog1.especialidades_semestres;
+              let esp2 = prog2.especialidades_semestres;
+
+              if (typeof esp1 === 'string') {
+                try {
+                  esp1 = JSON.parse(esp1);
+                } catch (e) {
+                  esp1 = {};
+                }
+              }
+              if (typeof esp2 === 'string') {
+                try {
+                  esp2 = JSON.parse(esp2);
+                } catch (e) {
+                  esp2 = {};
+                }
+              }
+
+              const semestres1 = Array.isArray(esp1) ? esp1.map(e => e.semestre || e).filter(s => s) : Object.values(esp1).filter(s => s);
+              const semestres2 = Array.isArray(esp2) ? esp2.map(e => e.semestre || e).filter(s => s) : Object.values(esp2).filter(s => s);
+
+              // Buscar semestres en común
+              const semestresComunes = semestres1.filter(s => semestres2.includes(s));
+
+              if (semestresComunes.length > 0) {
+                const warning = `⚠️ Conflicto de horario: ${pi1.titulo} Sección ${pi1.seccion} está tocando con ${pi2.titulo} Sección ${pi2.seccion} en el semestre ${semestresComunes.join(', ')}.`;
+                nuevasAdvertencias.push(warning);
+                nuevosConflicting.add(pi1.instanceId);
+                nuevosConflicting.add(pi2.instanceId);
+              }
+            }
+          }
+        });
+      });
+
+      // Remover duplicados
+      const advertenciasUnicas = [...new Set(nuevasAdvertencias)];
+      setWarnings(advertenciasUnicas);
+      setConflictingPostits(nuevosConflicting);
+    } catch (err) {
+      console.error('Error validando conflictos locales:', err);
+    }
+  };
+
+  // Función para actualizar advertencias basado en el estado actual de placedItems
+  const actualizarAdvertencias = (itemsActualizados = placedItems) => {
+    validarConflictosLocal(itemsActualizados);
+  };
 
   // Cargar horas registradas al iniciar
   useEffect(() => {
@@ -18,24 +157,50 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
     }
   }, [dashboardId]);
 
+  // Función para determinar si un horario es protegido
+  const esHorarioProtegido = (dia, horaInicio, semestreId) => {
+    // Solo aplica para plan_comun y 5to_6to
+    if (!['plan_comun', '5to_6to'].includes(semestreId)) {
+      return false;
+    }
+
+    // Horarios protegidos por día
+    const horariosProtegidos = {
+      'Martes': ['17:30', '18:30'],
+      'Miércoles': ['17:30', '18:30'],
+      'Viernes': ['10:30', '11:30', '12:30']
+    };
+
+    const horasProhibidas = horariosProtegidos[dia] || [];
+    return horasProhibidas.includes(horaInicio);
+  };
+
   const cargarHorasRegistradas = async () => {
     try {
       setCargando(true);
       const { horasRegistradas: hrs } = await horasRegistradasService.obtenerPorDashboard(dashboardId);
       
+      // Función para normalizar tiempo: "09:30" -> "9:30" (remover leading zeros)
+      const normalizarTiempo = (tiempoStr) => {
+        const [horas, minutos] = tiempoStr.substring(0, 5).split(':');
+        return `${parseInt(horas)}:${minutos}`;
+      };
+      
       // Convertir horas registradas a placedItems
       const grouped = {};
       hrs.forEach(hr => {
-        // Mapear día de la semana a semestre - esto es una aproximación
-        // En una versión mejorada, deberíamos guardar el semestreId en la BD
-        const semestreId = determinarSemestrePorEspecialidades(hr.hora_programable_id);
+        // Usar el campo horario de la BD si existe, si no, usar determinación por especialidades
+        const semestreId = hr.horario || determinarSemestrePorEspecialidades(hr.hora_programable_id);
         
         if (!grouped[semestreId]) {
           grouped[semestreId] = [];
         }
 
-        // Encontrar el bloque index basado en hora_inicio
-        const bloqueIndex = HORARIOS.bloques.findIndex(b => b.inicio === hr.hora_inicio);
+        // Normalizar hora_inicio (PostgreSQL devuelve HH:MM:SS, necesitamos 9:30 sin leading zero)
+        const horaInicio = normalizarTiempo(hr.hora_inicio);
+        
+        // Encontrar el bloque index basado en hora_inicio normalizada
+        const bloqueIndex = HORARIOS.bloques.findIndex(b => b.inicio === horaInicio);
 
         grouped[semestreId].push({
           id: hr.id, // ID de la BD
@@ -46,11 +211,16 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
           titulo: hr.titulo,
           tipo_hora: hr.tipo_hora,
           dia: hr.dia_semana,
-          bloqueIndex: bloqueIndex >= 0 ? bloqueIndex : 0
+          bloqueIndex: bloqueIndex >= 0 ? bloqueIndex : 0,
+          conflictos: hr.conflictos || [], // Cargar conflictos desde la BD
+          hasProtectedScheduleWarning: esHorarioProtegido(hr.dia_semana, horaInicio, semestreId) // Detectar horario protegido
         });
       });
 
       setPlacedItems(grouped);
+      
+      // Marcar postits conflictivos basado en los datos cargados
+      marcarConflictosDelBD(grouped);
     } catch (err) {
       console.error('Error cargando horas registradas:', err);
     } finally {
@@ -188,17 +358,8 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
                       // Actualizar en la BD
                       horasRegistradasService.actualizar(horaRegId, dia, index)
                         .then(() => {
-                          setPlacedItems(prev => {
-                            const current = prev[semestre.id] || [];
-                            return {
-                              ...prev,
-                              [semestre.id]: current.map(pi =>
-                                pi.instanceId === instanceId
-                                  ? { ...pi, dia, bloqueIndex: index }
-                                  : pi
-                              )
-                            };
-                          });
+                          // Recargar desde el servidor para reflejar cambios en conflictos
+                          cargarHorasRegistradas();
                         })
                         .catch(err => console.error('Error actualizando hora:', err));
                       return;
@@ -216,29 +377,36 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
 
                     // Guardar en la BD
                     horasRegistradasService.crear(prog.id, dashboardId, dia, index, semestre.id)
-                      .then(({ horaRegistrada }) => {
+                      .then(({ horaRegistrada, warnings: serverWarnings }) => {
                         const instanceId = `${prog.id}-${horaRegistrada.id}`;
-                        setPlacedItems(prev => {
-                          const current = prev[semestre.id] || [];
-                          return {
-                            ...prev,
-                            [semestre.id]: [
-                              ...current,
-                              {
-                                id: horaRegistrada.id,
-                                instanceId,
-                                hora_programable_id: prog.id,
-                                codigo: prog.codigo,
-                                seccion: prog.seccion,
-                                titulo: prog.titulo,
-                                tipo_hora: prog.tipo_hora,
-                                cantidad_horas: prog.cantidad_horas,
-                                dia,
-                                bloqueIndex: index
-                              }
-                            ]
-                          };
-                        });
+                        const newPlacedItems = {
+                          ...placedItems,
+                          [semestre.id]: [
+                            ...(placedItems[semestre.id] || []),
+                            {
+                              id: horaRegistrada.id,
+                              instanceId,
+                              hora_programable_id: prog.id,
+                              codigo: prog.codigo,
+                              seccion: prog.seccion,
+                              titulo: prog.titulo,
+                              tipo_hora: prog.tipo_hora,
+                              cantidad_horas: prog.cantidad_horas,
+                              dia,
+                              bloqueIndex: index,
+                              conflictos: [] // Los conflictos se guardan en la BD
+                            }
+                          ]
+                        };
+
+                        setPlacedItems(newPlacedItems);
+
+                        // Mostrar advertencias del servidor y recalcular conflictos
+                        if (serverWarnings && serverWarnings.length > 0) {
+                          setWarnings(serverWarnings);
+                          // Revalidar con los nuevos datos del servidor
+                          actualizarAdvertencias(newPlacedItems);
+                        }
                       })
                       .catch(err => console.error('Error creando hora registrada:', err));
                   }}
@@ -249,8 +417,9 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
                       .map(pi => (
                         <div
                           key={pi.instanceId}
-                          className="placed-postit"
+                          className={`placed-postit ${conflictingPostits.has(pi.instanceId) ? 'conflicting' : ''}`}
                           draggable
+                          title={conflictingPostits.has(pi.instanceId) ? warnings[0] || 'Aviso de conflicto de horario' : ''}
                           onDragStart={(e) => {
                             e.dataTransfer.effectAllowed = 'move';
                             e.dataTransfer.setData('application/json', JSON.stringify({
@@ -272,10 +441,8 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
                                   // Eliminar de la BD
                                   horasRegistradasService.eliminar(pi.id)
                                     .then(() => {
-                                      setPlacedItems(prev => ({
-                                        ...prev,
-                                        [semestre.id]: (prev[semestre.id] || []).filter(x => x.instanceId !== pi.instanceId)
-                                      }));
+                                      // Recargar desde el servidor para reflejar cambios en conflictos
+                                      cargarHorasRegistradas();
                                     })
                                     .catch(err => console.error('Error eliminando hora:', err));
                                 }}

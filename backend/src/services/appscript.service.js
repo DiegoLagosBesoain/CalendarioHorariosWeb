@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 const APPSCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbxUsU---EwNE6rl-ukONrO8tnt_84A4JI1m9Xa8OTq04GwkNBHW41Ztkr1azOD37Ttp/exec";
+  "https://script.google.com/macros/s/AKfycbw4wcBJRXDtq1WsKUf1RpXUcv33R3PHfYM99xy-nxHFkS-2nkhMKyzoP7vDYjfvKqpi/exec";
 
 const API_KEY = process.env.APPSCRIPT_KEY;
 
@@ -19,4 +19,31 @@ export async function callAppScript(action, params = {}) {
   const text = await response.text();
 
   return text;
+}
+
+/**
+ * Enviar diccionario de horarios a Google Sheets
+ * Realiza un POST request a Google Apps Script con el JSON del diccionario
+ */
+export async function enviarDiccionarioASheets(diccionario) {
+  try {
+    const url = new URL(APPSCRIPT_URL);
+    url.searchParams.append("action", "sheet.escribir");
+    url.searchParams.append("key", API_KEY);
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(diccionario)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Google Sheets error: ${response.statusText}`);
+    }
+
+    const resultado = await response.json();
+    return resultado;
+  } catch (err) {
+    throw new Error(`Error enviando diccionario a Google Sheets: ${err.message}`);
+  }
 }

@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS horas_registradas (
     hora_inicio TIME NOT NULL,
     hora_fin TIME NOT NULL,
     dia_semana VARCHAR(20) NOT NULL,
+    horario VARCHAR(50) DEFAULT 'plan_comun',
+    conflictos JSON DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_horas_reg_prog FOREIGN KEY (hora_programable_id) REFERENCES horas_programables(id) ON DELETE CASCADE,

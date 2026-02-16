@@ -158,5 +158,23 @@ export const horasRegistradasService = {
       throw new Error(err.error || 'Error limpiando horas registradas');
     }
     return res.json();
+  },
+
+  async obtenerDiccionarioParaGoogleSheets(dashboardId) {
+    const res = await fetch(`${API_URL}/horas-registradas/diccionario/${dashboardId}`);
+    if (!res.ok) throw new Error('Error obteniendo diccionario');
+    return res.json();
+  },
+
+  async enviarDiccionarioAGoogleSheets(dashboardId) {
+    const res = await fetch(`${API_URL}/horas-registradas/enviar-sheets/${dashboardId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Error enviando datos a Google Sheets');
+    }
+    return res.json();
   }
 };

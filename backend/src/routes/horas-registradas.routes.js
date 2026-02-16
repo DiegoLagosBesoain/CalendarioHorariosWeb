@@ -1,5 +1,7 @@
 import express from 'express';
 import * as horasRegistradasService from '../services/horas-registradas.service.js';
+import * as appScriptService from '../services/appscript.service.js';
+import { ejecutarValidaciones } from '../validators/hora-registrada.validators.js';
 
 const router = express.Router();
 
@@ -27,6 +29,21 @@ const BLOQUES = [
   { inicio: "18:30", fin: "19:20" },
   { inicio: "19:30", fin: "20:20" }
 ];
+
+/**
+ * GET /api/horas-registradas/diccionario/:dashboardId
+ * Obtener diccionario preparado para Google Sheets
+ */
+router.get('/diccionario/:dashboardId', async (req, res) => {
+  try {
+    const { dashboardId } = req.params;
+    const diccionario = await horasRegistradasService.armarDiccionarioParaGoogleSheets(dashboardId);
+    res.json({ diccionario });
+  } catch (err) {
+    console.error('Error al armar diccionario para Google Sheets:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /**
  * GET /api/horas-registradas/:dashboardId
@@ -65,16 +82,37 @@ router.post('/', async (req, res) => {
     // Convertir el día a número
     const diaNumero = diaNumeroPorNombre[dia] || 1;
 
+    // Ejecutar validaciones CON EL DÍA Y HORA_INICIO ESPECÍFICOS
+    const validationResult = await ejecutarValidaciones(horaProgramableId, dashboardId, semestreId, dia, bloque.inicio);
+    
+    // Si hay errores, rechazar la solicitud
+    if (validationResult.hasErrors) {
+      return res.status(400).json({ 
+        error: 'Validación fallida',
+        errors: validationResult.errors 
+      });
+    }
+
     const horaRegistrada = await horasRegistradasService.crear(
       horaProgramableId,
       dashboardId,
       diaNumero,
       bloqueIndex,
       bloque.inicio,
-      bloque.fin
+      bloque.fin,
+      semestreId
     );
 
-    res.json({ horaRegistrada });
+    // Guardar conflictos si existen
+    if (validationResult.conflictIds && validationResult.conflictIds.length > 0) {
+      await horasRegistradasService.guardarConflictos(horaRegistrada.id, validationResult.conflictIds);
+    }
+
+    // Retornar la hora registrada junto con las advertencias
+    res.json({ 
+      horaRegistrada,
+      warnings: validationResult.warnings 
+    });
   } catch (err) {
     console.error('Error al crear hora registrada:', err);
     res.status(500).json({ error: err.message });
@@ -123,6 +161,10 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Limpiar conflictos antes de eliminar
+    await horasRegistradasService.limpiarConflictos(id);
+    
     const horaRegistrada = await horasRegistradasService.eliminar(id);
 
     if (!horaRegistrada) {
@@ -148,6 +190,30 @@ router.delete('/dashboard/:dashboardId', async (req, res) => {
     res.json({ message: `${count} horas registradas eliminadas` });
   } catch (err) {
     console.error('Error al limpiar horas registradas:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/horas-registradas/enviar-sheets/:dashboardId
+ * Obtener diccionario y enviarlo a Google Sheets
+ */
+router.post('/enviar-sheets/:dashboardId', async (req, res) => {
+  try {
+    const { dashboardId } = req.params;
+    
+    // Obtener el diccionario preparado
+    const diccionario = await horasRegistradasService.armarDiccionarioParaGoogleSheets(dashboardId);
+    
+    // Enviar a Google Sheets a través del Apps Script
+    const resultado = await appScriptService.enviarDiccionarioASheets(diccionario);
+    
+    res.json({ 
+      mensaje: 'Datos enviados a Google Sheets exitosamente',
+      resultado 
+    });
+  } catch (err) {
+    console.error('Error al enviar datos a Google Sheets:', err);
     res.status(500).json({ error: err.message });
   }
 });
