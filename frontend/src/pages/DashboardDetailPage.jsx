@@ -1,8 +1,16 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { dashboardService, sheetsService, horasRegistradasService } from '../services/api';
+import { 
+  dashboardService, 
+  sheetsService, 
+  horasRegistradasService,
+  pruebasProgramablesService,
+  pruebasRegistradasService
+} from '../services/api';
 import { TimeTable } from '../components/TimeTable';
+import { CalendarView } from '../components/CalendarView';
+import { PruebasSidebar } from '../components/PruebasSidebar';
 import '../styles/DashboardDetail.css';
 
 export function DashboardDetailPage() {
@@ -17,6 +25,9 @@ export function DashboardDetailPage() {
   const [horariosProgramables, setHorariosProgramables] = useState([]);
   const [mostrarHorarios, setMostrarHorarios] = useState(false);
   const [expandirTabla, setExpandirTabla] = useState(false);
+  const [vistaActual, setVistaActual] = useState('horarios'); // 'horarios' o 'calendario'
+  const [pruebasProgramables, setPruebasProgramables] = useState([]);
+  const [pruebasRegistradas, setPruebasRegistradas] = useState([]);
 
   useEffect(() => {
     loadDashboard();
@@ -25,10 +36,8 @@ export function DashboardDetailPage() {
   const loadDashboard = async () => {
     try {
       setLoading(true);
-      // Obtener información del dashboard
-      // TODO: Crear endpoint GET /api/dashboards/:id
-      const dashboards = await dashboardService.getDashboards(user.id);
-      const found = dashboards.find(d => d.id === parseInt(dashboardId));
+      // Obtener información del dashboard usando el endpoint directo
+      const found = await dashboardService.getDashboard(parseInt(dashboardId));
       
       if (!found) {
         setError('Dashboard no encontrado');
@@ -58,7 +67,12 @@ export function DashboardDetailPage() {
       setHorariosProgramables(respuesta.horarios);
       setMostrarHorarios(true);
       
+      // Obtener las pruebas programables creadas
+      const respuestaPruebas = await pruebasProgramablesService.obtenerPruebasProgramables();
+      setPruebasProgramables(respuestaPruebas.pruebas || []);
+      
       console.log('Horarios cargados:', respuesta.horarios);
+      console.log('Pruebas cargadas:', respuestaPruebas.pruebas);
     } catch (err) {
       setError(err.message);
       console.error('Error cargando datos:', err);
@@ -66,6 +80,21 @@ export function DashboardDetailPage() {
       setCargandoDatos(false);
     }
   };
+
+  const cargarPruebasRegistradas = async () => {
+    try {
+      const { pruebasRegistradas: prs } = await pruebasRegistradasService.obtenerPorDashboard(dashboardId);
+      setPruebasRegistradas(prs || []);
+    } catch (err) {
+      console.error('Error cargando pruebas registradas:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (dashboardId) {
+      cargarPruebasRegistradas();
+    }
+  }, [dashboardId]);
 
   const handleLimpiarDatos = async () => {
     if (!window.confirm('¿Seguro que deseas eliminar todos los horarios programables?')) {
@@ -130,8 +159,26 @@ export function DashboardDetailPage() {
           </button>
           <h1>{dashboard?.nombre}</h1>
           <p>Creado: {new Date(dashboard?.created_at).toLocaleDateString()}</p>
+          {dashboard?.fecha_inicio && dashboard?.fecha_fin && (
+            <p className="date-range">Rango: {new Date(dashboard.fecha_inicio).toLocaleDateString()} - {new Date(dashboard.fecha_fin).toLocaleDateString()}</p>
+          )}
         </div>
       </header>
+
+      <div className="view-toggle">
+        <button
+          className={`toggle-btn ${vistaActual === 'horarios' ? 'active' : ''}`}
+          onClick={() => setVistaActual('horarios')}
+        >
+          📅 Horarios
+        </button>
+        <button
+          className={`toggle-btn ${vistaActual === 'calendario' ? 'active' : ''}`}
+          onClick={() => setVistaActual('calendario')}
+        >
+          📆 Calendario
+        </button>
+      </div>
 
       <div className="dashboard-controls">
         <button 
@@ -237,9 +284,32 @@ export function DashboardDetailPage() {
       )}
 
       <div className="dashboard-detail-layout">
-        <main className="dashboard-detail-main">
-          <TimeTable dashboardId={parseInt(dashboardId)} horasRegistradas={horasRegistradas} horariosProgramables={horariosProgramables} />
-        </main>
+        {vistaActual === 'horarios' ? (
+          <main className="dashboard-detail-main">
+            <TimeTable dashboardId={parseInt(dashboardId)} horasRegistradas={horasRegistradas} horariosProgramables={horariosProgramables} />
+          </main>
+        ) : (
+          <div className="calendario-layout">
+            <main className="calendario-main">
+              <CalendarView
+                fechaInicio={dashboard?.fecha_inicio}
+                fechaFin={dashboard?.fecha_fin}
+                horasRegistradas={horasRegistradas}
+                horariosProgramables={horariosProgramables}
+                pruebasRegistradas={pruebasRegistradas}
+                pruebasProgramables={pruebasProgramables}
+                dashboardId={dashboardId}
+                onPruebasChanged={cargarPruebasRegistradas}
+              />
+            </main>
+            <aside className="calendario-sidebar">
+              <PruebasSidebar 
+                pruebas={pruebasProgramables}
+                dashboardId={dashboardId}
+              />
+            </aside>
+          </div>
+        )}
       </div>
     </div>
   );

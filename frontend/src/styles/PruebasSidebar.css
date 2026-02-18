@@ -1,0 +1,205 @@
+.pruebas-sidebar {
+  width: 100%;
+  background: white;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  max-height: 800px;
+  overflow-y: auto;
+}
+
+.pruebas-sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.pruebas-sidebar::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+.pruebas-sidebar::-webkit-scrollbar-thumb {
+  background: #bbb;
+  border-radius: 4px;
+}
+
+.pruebas-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+.pruebas-sidebar .sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.pruebas-sidebar .sidebar-header h3 {
+  margin: 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.pruebas-sidebar .small-btn {
+  padding: 6px 10px;
+  background: #eee;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.pruebas-sidebar .small-btn:hover {
+  background: #ddd;
+}
+
+.pruebas-cols {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  overflow-x: auto;
+  padding-right: 4px;
+  padding-bottom: 4px;
+}
+
+.pruebas-cols::-webkit-scrollbar {
+  height: 6px;
+}
+
+.pruebas-cols::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.pruebas-cols::-webkit-scrollbar-thumb {
+  background: #bbb;
+  border-radius: 3px;
+}
+
+.pruebas-cols::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+.prueba-col {
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e8e8e8;
+  flex-shrink: 0;
+  min-width: 110px;
+}
+
+.prueba-col-title {
+  font-weight: 700;
+  font-size: 11px;
+  margin-bottom: 8px;
+  color: #555;
+  text-align: center;
+}
+
+.prueba-col-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.prueba-postit {
+  background: #ffccbc;
+  border-left: 4px solid #ff5722;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: grab;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.prueba-postit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.prueba-postit:active {
+  cursor: grabbing;
+}
+
+.prueba-postit-title {
+  font-weight: 700;
+  font-size: 11px;
+  color: #333;
+  margin-bottom: 3px;
+}
+
+.prueba-postit-subtitle {
+  font-size: 9px;
+  color: #666;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prueba-postit-body {
+  font-size: 10px;
+  color: #444;
+  font-weight: 600;
+  text-align: center;
+  padding: 3px 0;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 3px;
+}
+
+/* Colores específicos por tipo de prueba */
+.prueba-col:nth-child(1) .prueba-postit {
+  /* CLASE - Azul */
+  background: #bbdefb;
+  border-left-color: #2196f3;
+}
+
+.prueba-col:nth-child(2) .prueba-postit {
+  /* AYUDANTIA - Verde */
+  background: #c8e6c9;
+  border-left-color: #4caf50;
+}
+
+.prueba-col:nth-child(3) .prueba-postit {
+  /* LAB/TALLER - Naranja */
+  background: #ffccbc;
+  border-left-color: #ff5722;
+}
+
+.prueba-col:nth-child(4) .prueba-postit {
+  /* EXAMEN - Rojo */
+  background: #ffcdd2;
+  border-left-color: #f44336;
+}
+
+.prueba-col:nth-child(5) .prueba-postit {
+  /* TARDE - Morado */
+  background: #e1bee7;
+  border-left-color: #9c27b0;
+}
+
+/* Responsivo */
+@media (max-width: 1200px) {
+  .pruebas-cols {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .pruebas-cols {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .prueba-col {
+    min-width: 100px;
+  }
+}

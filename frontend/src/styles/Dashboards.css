@@ -124,6 +124,13 @@
   font-size: 13px;
 }
 
+.dashboard-range {
+  margin: 5px 0 15px 0;
+  color: #667eea;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .dashboard-actions {
   display: flex;
   gap: 10px;

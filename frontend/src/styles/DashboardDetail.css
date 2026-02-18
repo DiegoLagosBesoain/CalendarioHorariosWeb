@@ -26,6 +26,12 @@
   font-size: 14px;
 }
 
+.date-range {
+  margin: 5px 0 0 0;
+  color: #999;
+  font-size: 13px;
+}
+
 .back-btn {
   padding: 8px 16px;
   background: #f0f0f0;
@@ -41,6 +47,40 @@
 
 .back-btn:hover {
   background: #e0e0e0;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+  background: white;
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  justify-content: center;
+}
+
+.toggle-btn {
+  padding: 12px 24px;
+  border: 2px solid #ddd;
+  background: white;
+  color: #666;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+  font-size: 14px;
+}
+
+.toggle-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.toggle-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: transparent;
 }
 
 .dashboard-detail-main {
@@ -353,4 +393,34 @@
   padding: 40px;
   color: white;
   font-size: 18px;
+}
+
+/* Layout para calendario con sidebar de pruebas (60-40) */
+.calendario-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.calendario-main {
+  flex: 0 0 60%;
+  min-width: 0;
+}
+
+.calendario-sidebar {
+  flex: 0 0 calc(40% - 20px);
+  min-width: 0;
+}
+
+@media (max-width: 1200px) {
+  .calendario-layout {
+    flex-direction: column;
+  }
+
+  .calendario-main,
+  .calendario-sidebar {
+    flex: 1 1 100%;
+    width: 100%;
+  }
 }

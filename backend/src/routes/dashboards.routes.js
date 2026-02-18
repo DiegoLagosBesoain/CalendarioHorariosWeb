@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT id, nombre, usuario_id, created_at, updated_at FROM dashboards WHERE usuario_id = $1 ORDER BY created_at DESC',
+      'SELECT id, nombre, usuario_id, fecha_inicio, fecha_fin, created_at, updated_at FROM dashboards WHERE usuario_id = $1 ORDER BY created_at DESC',
       [usuario_id]
     );
 
@@ -24,10 +24,31 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Obtener un dashboard por ID
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      'SELECT id, nombre, usuario_id, fecha_inicio, fecha_fin, created_at, updated_at FROM dashboards WHERE id = $1',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Dashboard no encontrado' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error obteniendo dashboard:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 // Crear dashboard
 router.post('/', async (req, res) => {
   try {
-    const { nombre, usuario_id } = req.body;
+    const { nombre, usuario_id, fecha_inicio, fecha_fin } = req.body;
 
     if (!nombre || !usuario_id) {
       return res.status(400).json({ error: 'Nombre y usuario_id son requeridos' });
@@ -44,8 +65,10 @@ router.post('/', async (req, res) => {
     }
 
     const result = await pool.query(
-      'INSERT INTO dashboards (nombre, usuario_id) VALUES ($1, $2) RETURNING id, nombre, usuario_id, created_at, updated_at',
-      [nombre, usuario_id]
+      `INSERT INTO dashboards (nombre, usuario_id, fecha_inicio, fecha_fin)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, nombre, usuario_id, fecha_inicio, fecha_fin, created_at, updated_at`,
+      [nombre, usuario_id, fecha_inicio || null, fecha_fin || null]
     );
 
     res.status(201).json(result.rows[0]);
@@ -59,15 +82,37 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre } = req.body;
+    const { nombre, fecha_inicio, fecha_fin } = req.body;
 
-    if (!nombre) {
-      return res.status(400).json({ error: 'Nombre es requerido' });
+    if (!nombre && !fecha_inicio && !fecha_fin) {
+      return res.status(400).json({ error: 'Debe enviar al menos un campo para actualizar' });
     }
 
+    const campos = [];
+    const valores = [];
+    let index = 1;
+
+    if (nombre) {
+      campos.push(`nombre = $${index}`);
+      valores.push(nombre);
+      index++;
+    }
+    if (fecha_inicio !== undefined) {
+      campos.push(`fecha_inicio = $${index}`);
+      valores.push(fecha_inicio || null);
+      index++;
+    }
+    if (fecha_fin !== undefined) {
+      campos.push(`fecha_fin = $${index}`);
+      valores.push(fecha_fin || null);
+      index++;
+    }
+
+    valores.push(id);
+
     const result = await pool.query(
-      'UPDATE dashboards SET nombre = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, nombre, usuario_id, created_at, updated_at',
-      [nombre, id]
+      `UPDATE dashboards SET ${campos.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${index} RETURNING id, nombre, usuario_id, fecha_inicio, fecha_fin, created_at, updated_at`,
+      valores
     );
 
     if (result.rows.length === 0) {

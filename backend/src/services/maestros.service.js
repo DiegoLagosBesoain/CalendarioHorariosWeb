@@ -165,6 +165,76 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
         );
         horariosCreados.push(horarioLab);
       }
+
+      // ======================================================================
+      // CREAR PRUEBAS PROGRAMABLES
+      // ======================================================================
+      
+      // Crear prueba para CLASE si existe
+      if (curso["Clases A PROGRAMAR"] && curso["Clases A PROGRAMAR"] > 0) {
+        await crearPruebaProgramable(
+          codigo,
+          seccion,
+          "CLASE",
+          especialidades,
+          prof1?.id || null,
+          prof2?.id || null,
+          titulo
+        );
+      }
+
+      // Crear prueba para AYUDANTÍA si existe
+      if (
+        curso["Ayudantías PROGRAMAR"] &&
+        curso["Ayudantías PROGRAMAR"] > 0
+      ) {
+        await crearPruebaProgramable(
+          codigo,
+          seccion,
+          "AYUDANTIA",
+          especialidades,
+          prof1?.id || null,
+          prof2?.id || null,
+          titulo
+        );
+      }
+
+      // Crear prueba para LABORATORIO/TALLER si existe
+      if (
+        curso["Laboratorios o Talleres PROGRAMAR"] &&
+        curso["Laboratorios o Talleres PROGRAMAR"] > 0
+      ) {
+        await crearPruebaProgramable(
+          codigo,
+          seccion,
+          "LAB/TALLER",
+          especialidades,
+          profLab?.id || null,
+          null,
+          titulo
+        );
+      }
+
+      // Siempre crear pruebas para EXAMEN y TARDE
+      await crearPruebaProgramable(
+        codigo,
+        seccion,
+        "EXAMEN",
+        especialidades,
+        prof1?.id || null,
+        prof2?.id || null,
+        titulo
+      );
+
+      await crearPruebaProgramable(
+        codigo,
+        seccion,
+        "TARDE",
+        especialidades,
+        prof1?.id || null,
+        prof2?.id || null,
+        titulo
+      );
     }
 
     return horariosCreados;
@@ -314,6 +384,150 @@ export async function limpiarHorariosProgramables() {
     return result.rowCount;
   } catch (error) {
     console.error("Error limpiando horas programables:", error);
+    throw error;
+  }
+}
+
+// ==============================================================================
+// FUNCIONES PARA PRUEBAS PROGRAMABLES
+// ==============================================================================
+
+/**
+ * Crea un registro en pruebas_programables
+ * @param {string} codigo - Código del curso
+ * @param {number} seccion - Número de sección
+ * @param {string} tipoPrueba - CLASE, AYUDANTIA, LAB/TALLER, EXAMEN, TARDE
+ * @param {Object} especialidades - Diccionario de especialidades
+ * @param {number} profesor1Id - ID del profesor 1
+ * @param {number} profesor2Id - ID del profesor 2
+ * @param {string} titulo - Título del curso
+ * @returns {Promise<Object>} - Registro creado
+ */
+async function crearPruebaProgramable(
+  codigo,
+  seccion,
+  tipoPrueba,
+  especialidades,
+  profesor1Id,
+  profesor2Id,
+  titulo
+) {
+  try {
+    // Verificar si ya existe (por combinación de codigo, seccion, tipo_prueba)
+    const existente = await pool.query(
+      `SELECT id FROM pruebas_programables 
+       WHERE codigo = $1 AND seccion = $2 AND tipo_prueba = $3`,
+      [codigo, seccion, tipoPrueba]
+    );
+
+    if (existente.rows.length > 0) {
+      console.log(
+        `Prueba ${codigo}-${seccion}-${tipoPrueba} ya existe, actualizando...`
+      );
+      // Actualizar si ya existe
+      const result = await pool.query(
+        `UPDATE pruebas_programables 
+         SET profesor_1_id = $1, profesor_2_id = $2, 
+             especialidades_semestres = $3, titulo = $4, updated_at = NOW()
+         WHERE id = $5
+         RETURNING *`,
+        [
+          profesor1Id,
+          profesor2Id,
+          JSON.stringify(especialidades),
+          titulo,
+          existente.rows[0].id,
+        ]
+      );
+      return result.rows[0];
+    }
+
+    // Crear nuevo registro usando ON CONFLICT para manejar duplicados
+    const result = await pool.query(
+      `INSERT INTO pruebas_programables 
+       (codigo, seccion, tipo_prueba, profesor_1_id, profesor_2_id, especialidades_semestres, titulo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (codigo, seccion, tipo_prueba) 
+       DO UPDATE SET 
+         profesor_1_id = $4,
+         profesor_2_id = $5,
+         especialidades_semestres = $6,
+         titulo = $7,
+         updated_at = NOW()
+       RETURNING *`,
+      [
+        codigo,
+        seccion,
+        tipoPrueba,
+        profesor1Id,
+        profesor2Id,
+        JSON.stringify(especialidades),
+        titulo,
+      ]
+    );
+
+    console.log(
+      `Creada/Actualizada prueba: ${codigo}-${seccion}-${tipoPrueba}`
+    );
+    return result.rows[0];
+  } catch (error) {
+    console.error(
+      `Error creando prueba ${codigo}-${seccion}-${tipoPrueba}:`,
+      error
+    );
+    throw error;
+  }
+}
+
+/**
+ * Obtiene todas las pruebas_programables
+ * @returns {Promise<Array>}
+ */
+export async function obtenerPruebasProgramables() {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM pruebas_programables ORDER BY codigo, seccion, tipo_prueba`
+    );
+    return result.rows;
+  } catch (error) {
+    console.error("Error obteniendo pruebas programables:", error);
+    throw error;
+  }
+}
+
+/**
+ * Obtiene pruebas_programables por dashboard (filtrado)
+ * @param {number} dashboardId - ID del dashboard
+ * @returns {Promise<Array>}
+ */
+export async function obtenerPruebasPorDashboard(dashboardId) {
+  try {
+    const result = await pool.query(
+      `SELECT pp.* FROM pruebas_programables pp
+       JOIN pruebas_registradas pr ON pp.id = pr.prueba_programable_id
+       WHERE pr.dashboard_id = $1
+       GROUP BY pp.id
+       ORDER BY pp.codigo, pp.seccion, pp.tipo_prueba`,
+      [dashboardId]
+    );
+    return result.rows;
+  } catch (error) {
+    console.error("Error obteniendo pruebas por dashboard:", error);
+    throw error;
+  }
+}
+
+/**
+ * Limpia todos las pruebas_programables (útil para reload)
+ * @returns {Promise}
+ */
+export async function limpiarPruebasProgramables() {
+  try {
+    const result = await pool.query(`DELETE FROM pruebas_programables`);
+    console.log(`Eliminados ${result.rowCount} registros de pruebas_programables`);
+    return result.rowCount;
+  } catch (error) {
+    console.error("Error limpiando pruebas programables:", error);
     throw error;
   }
 }

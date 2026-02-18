@@ -4,6 +4,8 @@ import {
   procesarMaestrosYCrearHorarios,
   obtenerHorariosProgramables,
   limpiarHorariosProgramables,
+  obtenerPruebasProgramables,
+  limpiarPruebasProgramables,
 } from "../services/maestros.service.js";
 
 const router = express.Router();
@@ -122,6 +124,49 @@ router.delete("/horas-programables", async (req, res) => {
     });
   } catch (err) {
     console.error("Error limpiando horas-programables:", err);
+    res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * GET /api/sheets/pruebas-programables
+ * Obtiene todas las pruebas programables creadas
+ */
+router.get("/pruebas-programables", async (req, res) => {
+  try {
+    const pruebas = await obtenerPruebasProgramables();
+
+    res.json({
+      ok: true,
+      cantidad: pruebas.length,
+      pruebas,
+    });
+  } catch (err) {
+    console.error("Error en pruebas-programables:", err);
+    res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/sheets/pruebas-programables
+ * Limpia todas las pruebas programables (para reload)
+ */
+router.delete("/pruebas-programables", async (req, res) => {
+  try {
+    const cantidad = await limpiarPruebasProgramables();
+
+    res.json({
+      ok: true,
+      mensaje: `Se eliminaron ${cantidad} pruebas programables`,
+    });
+  } catch (err) {
+    console.error("Error limpiando pruebas-programables:", err);
     res.status(500).json({
       ok: false,
       error: err.message,

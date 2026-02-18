@@ -69,11 +69,17 @@ export const dashboardService = {
     return res.json();
   },
 
-  async createDashboard(nombre, userId) {
+  async getDashboard(dashboardId) {
+    const res = await fetch(`${API_URL}/dashboards/${dashboardId}`);
+    if (!res.ok) throw new Error('Error obteniendo dashboard');
+    return res.json();
+  },
+
+  async createDashboard(nombre, userId, fechaInicio, fechaFin) {
     const res = await fetch(`${API_URL}/dashboards`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, usuario_id: userId })
+      body: JSON.stringify({ nombre, usuario_id: userId, fecha_inicio: fechaInicio, fecha_fin: fechaFin })
     });
     if (!res.ok) throw new Error('Error creando dashboard');
     return res.json();
@@ -87,11 +93,11 @@ export const dashboardService = {
     return res.json();
   },
 
-  async updateDashboard(dashboardId, nombre) {
+  async updateDashboard(dashboardId, nombre, fechaInicio, fechaFin) {
     const res = await fetch(`${API_URL}/dashboards/${dashboardId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre })
+      body: JSON.stringify({ nombre, fecha_inicio: fechaInicio, fecha_fin: fechaFin })
     });
     if (!res.ok) throw new Error('Error actualizando dashboard');
     return res.json();
@@ -174,6 +180,92 @@ export const horasRegistradasService = {
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error || 'Error enviando datos a Google Sheets');
+    }
+    return res.json();
+  }
+};
+
+// ==================== PRUEBAS PROGRAMABLES ====================
+export const pruebasProgramablesService = {
+  async obtenerPruebasProgramables() {
+    const res = await fetch(`${API_URL}/sheets/pruebas-programables`);
+    if (!res.ok) throw new Error('Error obteniendo pruebas programables');
+    return res.json();
+  },
+
+  async limpiarPruebasProgramables() {
+    const res = await fetch(`${API_URL}/sheets/pruebas-programables`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new Error('Error limpiando pruebas');
+    return res.json();
+  }
+};
+
+// ==================== PRUEBAS REGISTRADAS ====================
+export const pruebasRegistradasService = {
+  async obtenerPorDashboard(dashboardId) {
+    const res = await fetch(`${API_URL}/pruebas-registradas/${dashboardId}`);
+    if (!res.ok) throw new Error('Error obteniendo pruebas registradas');
+    return res.json();
+  },
+
+  async obtenerPorRangoFechas(dashboardId, fechaInicio, fechaFin) {
+    const res = await fetch(`${API_URL}/pruebas-registradas/rango/${dashboardId}?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`);
+    if (!res.ok) throw new Error('Error obteniendo pruebas por rango de fechas');
+    return res.json();
+  },
+
+  async crear(pruebaProgramableId, dashboardId, fecha, horaInicio, horaFin) {
+    const res = await fetch(`${API_URL}/pruebas-registradas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        pruebaProgramableId, 
+        dashboardId, 
+        fecha,
+        horaInicio,
+        horaFin
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Error creando prueba registrada');
+    }
+    return res.json();
+  },
+
+  async actualizar(id, fecha, horaInicio, horaFin) {
+    const res = await fetch(`${API_URL}/pruebas-registradas/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fecha, horaInicio, horaFin })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Error actualizando prueba registrada');
+    }
+    return res.json();
+  },
+
+  async eliminar(id) {
+    const res = await fetch(`${API_URL}/pruebas-registradas/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Error eliminando prueba registrada');
+    }
+    return res.json();
+  },
+
+  async limpiarDashboard(dashboardId) {
+    const res = await fetch(`${API_URL}/pruebas-registradas/dashboard/${dashboardId}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Error limpiando pruebas registradas');
     }
     return res.json();
   }

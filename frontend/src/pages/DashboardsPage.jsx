@@ -11,6 +11,8 @@ export function DashboardsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newDashboardName, setNewDashboardName] = useState('');
+  const [newDashboardStartDate, setNewDashboardStartDate] = useState('');
+  const [newDashboardEndDate, setNewDashboardEndDate] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
 
@@ -35,9 +37,16 @@ export function DashboardsPage() {
     if (!newDashboardName.trim()) return;
 
     try {
-      const newDashboard = await dashboardService.createDashboard(newDashboardName, user.id);
+      const newDashboard = await dashboardService.createDashboard(
+        newDashboardName,
+        user.id,
+        newDashboardStartDate || null,
+        newDashboardEndDate || null
+      );
       setDashboards([...dashboards, newDashboard]);
       setNewDashboardName('');
+      setNewDashboardStartDate('');
+      setNewDashboardEndDate('');
       setError('');
     } catch (err) {
       setError(err.message);
@@ -59,8 +68,14 @@ export function DashboardsPage() {
     if (!editName.trim()) return;
 
     try {
-      await dashboardService.updateDashboard(dashboardId, editName);
-      setDashboards(dashboards.map(d => 
+      const dashboardActual = dashboards.find(d => d.id === dashboardId);
+      await dashboardService.updateDashboard(
+        dashboardId,
+        editName,
+        dashboardActual?.fecha_inicio || null,
+        dashboardActual?.fecha_fin || null
+      );
+      setDashboards(dashboards.map(d =>
         d.id === dashboardId ? { ...d, nombre: editName } : d
       ));
       setEditingId(null);
@@ -98,6 +113,18 @@ export function DashboardsPage() {
           value={newDashboardName}
           onChange={(e) => setNewDashboardName(e.target.value)}
         />
+        <input
+          type="date"
+          value={newDashboardStartDate}
+          onChange={(e) => setNewDashboardStartDate(e.target.value)}
+          placeholder="Fecha inicio"
+        />
+        <input
+          type="date"
+          value={newDashboardEndDate}
+          onChange={(e) => setNewDashboardEndDate(e.target.value)}
+          placeholder="Fecha fin"
+        />
         <button type="submit">Crear Dashboard</button>
       </form>
 
@@ -132,6 +159,11 @@ export function DashboardsPage() {
                   <p className="dashboard-date">
                     Creado: {new Date(dashboard.created_at).toLocaleDateString()}
                   </p>
+                  {dashboard.fecha_inicio && dashboard.fecha_fin && (
+                    <p className="dashboard-range">
+                      Rango: {new Date(dashboard.fecha_inicio).toLocaleDateString()} - {new Date(dashboard.fecha_fin).toLocaleDateString()}
+                    </p>
+                  )}
                   <div className="dashboard-actions">
                     <button 
                       onClick={() => handleDashboardClick(dashboard.id)} 
