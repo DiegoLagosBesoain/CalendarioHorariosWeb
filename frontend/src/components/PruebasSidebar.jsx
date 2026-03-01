@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { getPostitStyle } from '../utils/colorUtils';
 import '../styles/PruebasSidebar.css';
 
 export function PruebasSidebar({ 
@@ -124,6 +125,9 @@ export function PruebasSidebar({
   }
 
   const renderPostit = (p, col) => {
+    // Obtener el estilo de color basado en especialidades y semestres
+    const colorStyle = getPostitStyle(p.especialidades_semestres, false);
+    
     return (
       <div
         key={p.id}
@@ -132,6 +136,7 @@ export function PruebasSidebar({
         onDragStart={(e) => onDragStart(e, p.id, col)}
         onDragOver={onDragOver}
         onDrop={(e) => onDropOnItem(e, col, p.id)}
+        style={colorStyle}
       >
         <div className="prueba-postit-title">{p.codigo}-{p.seccion}</div>
         <div className="prueba-postit-subtitle">{p.titulo || 'Sin título'}</div>

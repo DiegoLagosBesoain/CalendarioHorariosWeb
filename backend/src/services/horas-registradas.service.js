@@ -22,7 +22,7 @@ async function crear(horaProgramableId, dashboardId, diaNumero, bloqueIndex, hor
  */
 async function obtenerPorDashboard(dashboardId) {
   const result = await pool.query(
-    `SELECT hr.*, hp.codigo, hp.seccion, hp.titulo, hp.tipo_hora
+    `SELECT hr.*, hp.codigo, hp.seccion, hp.titulo, hp.tipo_hora, hp.especialidades_semestres, hp.cantidad_horas
      FROM horas_registradas hr
      JOIN horas_programables hp ON hr.hora_programable_id = hp.id
      WHERE hr.dashboard_id = $1
@@ -38,7 +38,7 @@ async function obtenerPorDashboard(dashboardId) {
  */
 async function obtenerPorId(id) {
   const result = await pool.query(
-    `SELECT hr.*, hp.codigo, hp.seccion, hp.titulo, hp.tipo_hora
+    `SELECT hr.*, hp.codigo, hp.seccion, hp.titulo, hp.tipo_hora, hp.especialidades_semestres, hp.cantidad_horas
      FROM horas_registradas hr
      JOIN horas_programables hp ON hr.hora_programable_id = hp.id
      WHERE hr.id = $1`,

@@ -2,6 +2,8 @@ import express from 'express';
 import * as horasRegistradasService from '../services/horas-registradas.service.js';
 import * as appScriptService from '../services/appscript.service.js';
 import { ejecutarValidaciones } from '../validators/hora-registrada.validators.js';
+import { reevaluarConflictosDashboard } from '../services/conflict-detector.service.js';
+
 
 const router = express.Router();
 
@@ -103,10 +105,8 @@ router.post('/', async (req, res) => {
       semestreId
     );
 
-    // Guardar conflictos si existen
-    if (validationResult.conflictIds && validationResult.conflictIds.length > 0) {
-      await horasRegistradasService.guardarConflictos(horaRegistrada.id, validationResult.conflictIds);
-    }
+    // Re-evaluar TODOS los conflictos del dashboard de forma centralizada
+    await reevaluarConflictosDashboard(dashboardId);
 
     // Retornar la hora registrada junto con las advertencias
     res.json({ 
@@ -147,6 +147,13 @@ router.put('/:id', async (req, res) => {
       bloque.fin
     );
 
+    // Obtener el dashboardId de la hora actualizada
+    const horaCompleta = await horasRegistradasService.obtenerPorId(id);
+    if (horaCompleta && horaCompleta.dashboard_id) {
+      // Re-evaluar TODOS los conflictos del dashboard
+      await reevaluarConflictosDashboard(horaCompleta.dashboard_id);
+    }
+
     res.json({ horaRegistrada });
   } catch (err) {
     console.error('Error al actualizar hora registrada:', err);
@@ -162,13 +169,19 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Limpiar conflictos antes de eliminar
-    await horasRegistradasService.limpiarConflictos(id);
+    // Obtener el dashboardId antes de eliminar
+    const horaCompleta = await horasRegistradasService.obtenerPorId(id);
+    const dashboardId = horaCompleta?.dashboard_id;
     
     const horaRegistrada = await horasRegistradasService.eliminar(id);
 
     if (!horaRegistrada) {
       return res.status(404).json({ error: 'Hora registrada no encontrada' });
+    }
+
+    // Re-evaluar TODOS los conflictos del dashboard después de eliminar
+    if (dashboardId) {
+      await reevaluarConflictosDashboard(dashboardId);
     }
 
     res.json({ message: 'Hora registrada eliminada', horaRegistrada });

@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { pruebasRegistradasService } from '../services/api';
+import { getPostitStyle } from '../utils/colorUtils';
 import '../styles/CalendarView.css';
 
 export function CalendarView({ 
@@ -207,13 +208,11 @@ export function CalendarView({
                     const fechaStr = fecha.toISOString().split('T')[0]; // YYYY-MM-DD
                     
                     try {
-                      // Crear la prueba registrada con horario por defecto
+                      // Crear la prueba registrada (sin hora_inicio/fin)
                       const resultado = await pruebasRegistradasService.crear(
                         prueba.id,
                         dashboardId,
-                        fechaStr,
-                        '09:00',
-                        '11:00'
+                        fechaStr
                       );
                       
                       // Notificar al padre para recargar
@@ -232,9 +231,7 @@ export function CalendarView({
                       // Actualizar la prueba registrada con la nueva fecha
                       await pruebasRegistradasService.actualizar(
                         data.id,
-                        fechaStr,
-                        data.horaInicio || '09:00',
-                        data.horaFin || '11:00'
+                        fechaStr
                       );
                       
                       // Notificar al padre para recargar
@@ -254,23 +251,31 @@ export function CalendarView({
                   <div className="pruebas-container">
                     {pruebasDelDia.map(prueba => {
                       const prog = getPruebaProgramable(prueba.prueba_programable_id);
+                      const tieneConflicto = Array.isArray(prueba.conflictos) && prueba.conflictos.length > 0;
+                      const colorStyle = prog 
+                        ? getPostitStyle(prog.especialidades_semestres, tieneConflicto)
+                        : {};
+                      
                       return (
                         <div 
                           key={prueba.id} 
-                          className={`prueba-tag tipo-${prog?.tipo_prueba?.toLowerCase().replace('/', '-')}`}
+                          className={`prueba-tag ${tieneConflicto ? 'conflicting' : ''} tipo-${prog?.tipo_prueba?.toLowerCase().replace('/', '-')}`}
                           draggable={true}
+                          style={colorStyle}
                           onDragStart={(e) => {
                             e.dataTransfer.effectAllowed = 'move';
                             e.dataTransfer.setData('application/json', JSON.stringify({
                               type: 'prueba-registrada',
-                              id: prueba.id,
-                              horaInicio: prueba.hora_inicio,
-                              horaFin: prueba.hora_fin
+                              id: prueba.id
                             }));
                           }}
-                          title={`${prog?.titulo || 'Sin título'} - ${prog?.tipo_prueba || ''}`}
+                          title={`${prog?.titulo || 'Sin título'} - Sección ${prog?.seccion || '?'} - ${prog?.tipo_prueba || ''}`}
                         >
-                          <span className="prueba-codigo">{prog?.codigo || 'N/A'}</span>
+                          <div className="prueba-info">
+                            <span className="prueba-codigo">{prog?.codigo || 'N/A'}-{prog?.seccion || '?'}</span>
+                            <span className="prueba-titulo">{prog?.titulo || 'Sin título'}</span>
+                            <span className="prueba-tipo">{prog?.tipo_prueba || ''}</span>
+                          </div>
                           <button
                             className="prueba-remove-btn"
                             onClick={async (e) => {

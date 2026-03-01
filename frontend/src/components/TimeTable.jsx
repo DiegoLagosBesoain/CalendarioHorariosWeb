@@ -1,153 +1,96 @@
 import { useState, useEffect } from 'react';
 import { HORARIOS } from '../constants/horarios';
 import { horasRegistradasService } from '../services/api';
+import { getPostitStyle, getTipoHorario } from '../utils/colorUtils';
 import '../styles/TimeTable.css';
 import HorariosSidebar from './HorariosSidebar';
 
-export function TimeTable({ dashboardId, horasRegistradas = [], horariosProgramables = [] }) {
+export function TimeTable({ 
+  dashboardId, 
+  horasRegistradas = [], 
+  horariosProgramables = [],
+  filtroEspecialidad = 'TODOS',
+  filtroSemestre = 'TODOS',
+  onFiltroEspecialidadChange = () => {},
+  onFiltroSemestreChange = () => {},
+  filtrarHorario = () => true
+}) {
   const [modoVisualizacion, setModoVisualizacion] = useState('cascada');
   const [semestreActual, setSemestreActual] = useState(0);
   // placedItems: { [semestreId]: [ { id (BD), instanceId, hora_programable_id, codigo, seccion, titulo, tipo_hora, cantidad_horas, dia, bloqueIndex } ] }
   const [placedItems, setPlacedItems] = useState({});
   const [cargando, setCargando] = useState(false);
-  const [warnings, setWarnings] = useState([]);
+  const [warningsMap, setWarningsMap] = useState({});  // { instanceId: [msg1, msg2, ...] }
   const [conflictingPostits, setConflictingPostits] = useState(new Set());
 
-  // Función para marcar conflictos basados en los datos cargados de la BD
-  const marcarConflictosDelBD = (itemsAValidar) => {
+  // Mapa de bloques: inicio -> rango completo
+  const BLOQUES_MAP = {
+    "8:30": "8:30-9:20", "9:30": "9:30-10:20", "10:30": "10:30-11:20",
+    "11:30": "11:30-12:20", "12:30": "12:30-13:20", "13:30": "13:30-14:20",
+    "14:30": "14:30-15:20", "15:30": "15:30-16:20", "16:30": "16:30-17:20",
+    "17:30": "17:30-18:20", "18:30": "18:30-19:20", "19:30": "19:30-20:20"
+  };
+
+  // Normalizar hora: "09:30" -> "9:30"
+  const normalizarHora = (h) => {
+    if (!h) return h;
+    const [hh, mm] = h.split(':');
+    return `${parseInt(hh)}:${mm}`;
+  };
+
+  /**
+   * NUEVA función simplificada que lee conflictos desde la BD
+   * Los conflictos se calculan en el backend de forma centralizada
+   */
+  const evaluarConflictosDesBD = (itemsAValidar) => {
     try {
-      const nuevasAdvertencias = [];
+      const advertenciasPorPostit = {};
       const nuevosConflicting = new Set();
 
-      // Por cada semestre
+      // Recopilar TODOS los items de TODOS los semestres
+      const todosLosItems = [];
       Object.keys(itemsAValidar).forEach(semestreId => {
-        const horasDelSemestre = itemsAValidar[semestreId];
-
-        // Revisar cada hora para ver si tiene conflictos guardados
-        horasDelSemestre.forEach(pi => {
-          if (pi.conflictos && Array.isArray(pi.conflictos) && pi.conflictos.length > 0) {
-            // Para cada conflicto guardado
-            pi.conflictos.forEach(conflictId => {
-              // Buscar el postit conflictivo en todas las semestres
-              horasDelSemestre.forEach(pi2 => {
-                if (pi2.id === conflictId) {
-                  // Ambos postits tienen conflicto
-                  nuevosConflicting.add(pi.instanceId);
-                  nuevosConflicting.add(pi2.instanceId);
-                  
-                  // Crear mensaje de conflicto
-                  const msg = `⚠️ Conflicto de horario: ${pi.titulo} Sección ${pi.seccion} está tocando con ${pi2.titulo} Sección ${pi2.seccion}.`;
-                  if (!nuevasAdvertencias.includes(msg)) {
-                    nuevasAdvertencias.push(msg);
-                  }
-                }
-              });
-            });
-          }
-
-          // Revisar si tiene horario protegido
-          if (pi.hasProtectedScheduleWarning) {
-            nuevosConflicting.add(pi.instanceId);
-            const nombreTipoHorario = semestreId === 'plan_comun' ? 'Plan Común' : '5to y 6to';
-            const msg = `🔒 Horario Protegido: ${pi.titulo} Sección ${pi.seccion} está programado en una franja protegida de ${nombreTipoHorario}.`;
-            if (!nuevasAdvertencias.includes(msg)) {
-              nuevasAdvertencias.push(msg);
-            }
-          }
+        (itemsAValidar[semestreId] || []).forEach(pi => {
+          todosLosItems.push({ ...pi, semestreId });
         });
       });
 
-      setWarnings(nuevasAdvertencias);
-      setConflictingPostits(nuevosConflicting);
-    } catch (err) {
-      console.error('Error marcando conflictos de BD:', err);
-    }
-  };
+      // Helper: agregar advertencia a un post-it específico
+      const addWarning = (instanceId, msg) => {
+        if (!advertenciasPorPostit[instanceId]) advertenciasPorPostit[instanceId] = [];
+        if (!advertenciasPorPostit[instanceId].includes(msg)) advertenciasPorPostit[instanceId].push(msg);
+      };
 
-  // Función para validar conflictos localmente (por bloque horario)
-  const validarConflictosLocal = (itemsAValidar) => {
-    try {
-      const nuevasAdvertencias = [];
-      const nuevosConflicting = new Set();
-
-      // Por cada semestre
-      Object.keys(itemsAValidar).forEach(semestreId => {
-        const horasDelSemestre = itemsAValidar[semestreId];
-
-        // Agrupar por bloque horario (día + bloqueIndex)
-        const bloques = {};
-        horasDelSemestre.forEach(pi => {
-          const blocKey = `${pi.dia}-${pi.bloqueIndex}`;
-          if (!bloques[blocKey]) {
-            bloques[blocKey] = [];
-          }
-          bloques[blocKey].push(pi);
-        });
-
-        // Revisar conflictos dentro de cada bloque horario
-        Object.values(bloques).forEach(horasEnBloque => {
-          for (let i = 0; i < horasEnBloque.length; i++) {
-            for (let j = i + 1; j < horasEnBloque.length; j++) {
-              const pi1 = horasEnBloque[i];
-              const pi2 = horasEnBloque[j];
-
-              // Saltar si mismo código (mismo curso, diferente sección)
-              if (pi1.codigo === pi2.codigo) continue;
-
-              // Obtener especialidades de ambos programables
-              const prog1 = horariosProgramables.find(p => p.id === pi1.hora_programable_id);
-              const prog2 = horariosProgramables.find(p => p.id === pi2.hora_programable_id);
-
-              if (!prog1 || !prog2) continue;
-
-              // Extraer semestres de especialidades
-              let esp1 = prog1.especialidades_semestres;
-              let esp2 = prog2.especialidades_semestres;
-
-              if (typeof esp1 === 'string') {
-                try {
-                  esp1 = JSON.parse(esp1);
-                } catch (e) {
-                  esp1 = {};
-                }
-              }
-              if (typeof esp2 === 'string') {
-                try {
-                  esp2 = JSON.parse(esp2);
-                } catch (e) {
-                  esp2 = {};
-                }
-              }
-
-              const semestres1 = Array.isArray(esp1) ? esp1.map(e => e.semestre || e).filter(s => s) : Object.values(esp1).filter(s => s);
-              const semestres2 = Array.isArray(esp2) ? esp2.map(e => e.semestre || e).filter(s => s) : Object.values(esp2).filter(s => s);
-
-              // Buscar semestres en común
-              const semestresComunes = semestres1.filter(s => semestres2.includes(s));
-
-              if (semestresComunes.length > 0) {
-                const warning = `⚠️ Conflicto de horario: ${pi1.titulo} Sección ${pi1.seccion} está tocando con ${pi2.titulo} Sección ${pi2.seccion} en el semestre ${semestresComunes.join(', ')}.`;
-                nuevasAdvertencias.push(warning);
-                nuevosConflicting.add(pi1.instanceId);
-                nuevosConflicting.add(pi2.instanceId);
-              }
+      // Procesar cada item y evaluar sus conflictos desde el campo 'conflictos' de la BD
+      todosLosItems.forEach(pi => {
+        // 1. Conflictos de BD (calculados por el backend)
+        if (pi.conflictos && Array.isArray(pi.conflictos) && pi.conflictos.length > 0) {
+          nuevosConflicting.add(pi.instanceId);
+          
+          // Buscar los items en conflicto para mostrar detalles
+          pi.conflictos.forEach(conflictId => {
+            const itemEnConflicto = todosLosItems.find(item => item.id === conflictId);
+            if (itemEnConflicto) {
+              addWarning(pi.instanceId, `⚠️ Conflicto con ${itemEnConflicto.titulo} Sec ${itemEnConflicto.seccion}`);
+            } else {
+              addWarning(pi.instanceId, `⚠️ Conflicto detectado`);
             }
-          }
-        });
+          });
+        }
+
+        // 2. Horario protegido (evaluación local simple)
+        if (pi.hasProtectedScheduleWarning) {
+          nuevosConflicting.add(pi.instanceId);
+          const nombreTipo = pi.semestreId === 'plan_comun' ? 'Plan Común' : '5to y 6to';
+          addWarning(pi.instanceId, `🔒 Horario protegido de ${nombreTipo}`);
+        }
       });
 
-      // Remover duplicados
-      const advertenciasUnicas = [...new Set(nuevasAdvertencias)];
-      setWarnings(advertenciasUnicas);
+      setWarningsMap(advertenciasPorPostit);
       setConflictingPostits(nuevosConflicting);
     } catch (err) {
-      console.error('Error validando conflictos locales:', err);
+      console.error('Error evaluando conflictos:', err);
     }
-  };
-
-  // Función para actualizar advertencias basado en el estado actual de placedItems
-  const actualizarAdvertencias = (itemsActualizados = placedItems) => {
-    validarConflictosLocal(itemsActualizados);
   };
 
   // Cargar horas registradas al iniciar
@@ -156,6 +99,13 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
       cargarHorasRegistradas();
     }
   }, [dashboardId]);
+
+  // Re-evaluar conflictos cuando llegan los horariosProgramables (recarga de página)
+  useEffect(() => {
+    if (horariosProgramables.length > 0 && Object.keys(placedItems).length > 0) {
+      evaluarConflictosDesBD(placedItems);
+    }
+  }, [horariosProgramables]);
 
   // Función para determinar si un horario es protegido
   const esHorarioProtegido = (dia, horaInicio, semestreId) => {
@@ -219,8 +169,8 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
 
       setPlacedItems(grouped);
       
-      // Marcar postits conflictivos basado en los datos cargados
-      marcarConflictosDelBD(grouped);
+      // Evaluar conflictos desde la BD
+      evaluarConflictosDesBD(grouped);
     } catch (err) {
       console.error('Error cargando horas registradas:', err);
     } finally {
@@ -264,8 +214,12 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
   };
 
   // Filtrar programables para un semestre particular
+  // Ahora también aplica los filtros de usuario (especialidad/semestre)
   function filterForSemester(semestreId) {
     return (h) => {
+      // Primero aplicar el filtro de usuario
+      if (!filtrarHorario(h)) return false;
+      
       if (!h || !h.especialidades_semestres) return false;
       let esp = h.especialidades_semestres;
       if (typeof esp === 'string') {
@@ -377,49 +331,40 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
 
                     // Guardar en la BD
                     horasRegistradasService.crear(prog.id, dashboardId, dia, index, semestre.id)
-                      .then(({ horaRegistrada, warnings: serverWarnings }) => {
-                        const instanceId = `${prog.id}-${horaRegistrada.id}`;
-                        const newPlacedItems = {
-                          ...placedItems,
-                          [semestre.id]: [
-                            ...(placedItems[semestre.id] || []),
-                            {
-                              id: horaRegistrada.id,
-                              instanceId,
-                              hora_programable_id: prog.id,
-                              codigo: prog.codigo,
-                              seccion: prog.seccion,
-                              titulo: prog.titulo,
-                              tipo_hora: prog.tipo_hora,
-                              cantidad_horas: prog.cantidad_horas,
-                              dia,
-                              bloqueIndex: index,
-                              conflictos: [] // Los conflictos se guardan en la BD
-                            }
-                          ]
-                        };
-
-                        setPlacedItems(newPlacedItems);
-
-                        // Mostrar advertencias del servidor y recalcular conflictos
-                        if (serverWarnings && serverWarnings.length > 0) {
-                          setWarnings(serverWarnings);
-                          // Revalidar con los nuevos datos del servidor
-                          actualizarAdvertencias(newPlacedItems);
-                        }
+                      .then(() => {
+                        // Recargar desde el servidor para reflejar conflictos correctamente
+                        cargarHorasRegistradas();
                       })
                       .catch(err => console.error('Error creando hora registrada:', err));
                   }}
                 >
                   <div className="cell-content">
                     {(placedItems[semestre.id] || [])
-                      .filter(pi => pi.dia === dia && pi.bloqueIndex === index)
-                      .map(pi => (
+                      .filter(pi => {
+                        // Filtrar por día y bloque
+                        if (pi.dia !== dia || pi.bloqueIndex !== index) return false;
+                        
+                        // Aplicar filtro de usuario
+                        const prog = horariosProgramables.find(p => p.id === pi.hora_programable_id);
+                        if (!prog) return true; // Si no encontramos el programable, mostrar igual
+                        
+                        return filtrarHorario(prog);
+                      })
+                      .map(pi => {
+                        // Obtener el programable para conocer las especialidades_semestres
+                        const prog = horariosProgramables.find(p => p.id === pi.hora_programable_id);
+                        const tieneConflicto = conflictingPostits.has(pi.instanceId);
+                        const colorStyle = prog 
+                          ? getPostitStyle(prog.especialidades_semestres, tieneConflicto, getTipoHorario(semestre.id))
+                          : {};
+                        
+                        return (
                         <div
                           key={pi.instanceId}
-                          className={`placed-postit ${conflictingPostits.has(pi.instanceId) ? 'conflicting' : ''}`}
+                          className={`placed-postit ${tieneConflicto ? 'conflicting' : ''}`}
                           draggable
-                          title={conflictingPostits.has(pi.instanceId) ? warnings[0] || 'Aviso de conflicto de horario' : ''}
+                          title={warningsMap[pi.instanceId] ? warningsMap[pi.instanceId].join('\n') : ''}
+                          style={colorStyle}
                           onDragStart={(e) => {
                             e.dataTransfer.effectAllowed = 'move';
                             e.dataTransfer.setData('application/json', JSON.stringify({
@@ -454,7 +399,8 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
                             <div className="postit-type">{pi.tipo_hora}</div>
                           </div>
                         </div>
-                      ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -474,6 +420,11 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
           filterFn={filterForSemester(semestre.id)}
           getHorasUsadas={getHorasUsadas}
           puedeAgregar={puedeAgregar}
+          tipoHorario={getTipoHorario(semestre.id)}
+          filtroEspecialidad={filtroEspecialidad}
+          filtroSemestre={filtroSemestre}
+          onFiltroEspecialidadChange={onFiltroEspecialidadChange}
+          onFiltroSemestreChange={onFiltroSemestreChange}
         />
       </div>
     </div>
@@ -530,6 +481,11 @@ export function TimeTable({ dashboardId, horasRegistradas = [], horariosPrograma
                 filterFn={filterForSemester(HORARIOS.semestres[semestreActual].id)}
                 getHorasUsadas={getHorasUsadas}
                 puedeAgregar={puedeAgregar}
+                tipoHorario={getTipoHorario(HORARIOS.semestres[semestreActual].id)}
+                filtroEspecialidad={filtroEspecialidad}
+                filtroSemestre={filtroSemestre}
+                onFiltroEspecialidadChange={onFiltroEspecialidadChange}
+                onFiltroSemestreChange={onFiltroSemestreChange}
               />
             </div>
           </div>

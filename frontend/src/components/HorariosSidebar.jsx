@@ -1,7 +1,18 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { getPostitStyle } from '../utils/colorUtils';
 import '../styles/HorariosSidebar.css';
 
-export function HorariosSidebar({ horarios = [], filterFn = () => true, getHorasUsadas = () => 0, puedeAgregar = () => true }) {
+export function HorariosSidebar({ 
+  horarios = [], 
+  filterFn = () => true, 
+  getHorasUsadas = () => 0, 
+  puedeAgregar = () => true, 
+  tipoHorario = null,
+  filtroEspecialidad = 'TODOS',
+  filtroSemestre = 'TODOS',
+  onFiltroEspecialidadChange = () => {},
+  onFiltroSemestreChange = () => {}
+}) {
   const [columns, setColumns] = useState({
     CLASE: [],
     AYUDANTIA: [],
@@ -97,6 +108,9 @@ export function HorariosSidebar({ horarios = [], filterFn = () => true, getHoras
     const horasUsadas = getHorasUsadas(h.id);
     const canAdd = puedeAgregar(h.id, h.cantidad_horas);
     const isFull = horasUsadas >= h.cantidad_horas;
+    
+    // Obtener el estilo de color basado en especialidades y semestres
+    const colorStyle = getPostitStyle(h.especialidades_semestres, false, tipoHorario);
 
     return (
       <div
@@ -112,7 +126,11 @@ export function HorariosSidebar({ horarios = [], filterFn = () => true, getHoras
         }}
         onDragOver={onDragOver}
         onDrop={(e) => onDropOnItem(e, col, h.id)}
-        style={{ opacity: isFull ? 0.5 : 1, cursor: isFull ? 'not-allowed' : 'grab' }}
+        style={{ 
+          opacity: isFull ? 0.5 : 1, 
+          cursor: isFull ? 'not-allowed' : 'grab',
+          ...(isFull ? {} : colorStyle)
+        }}
       >
         <div className="postit-title">{h.codigo}-{h.seccion}</div>
         <div className="postit-subtitle">{h.titulo || 'Sin título'}</div>
@@ -130,6 +148,64 @@ export function HorariosSidebar({ horarios = [], filterFn = () => true, getHoras
       <div className="sidebar-header">
         <h3>Horas Programables</h3>
         <button onClick={resetCols} className="small-btn">Reset</button>
+      </div>
+
+      <div className="filtros-section">
+        <h4>Filtros</h4>
+        
+        <div className="filtro-group">
+          <label htmlFor="filtro-especialidad">Especialidad:</label>
+          <select 
+            id="filtro-especialidad"
+            value={filtroEspecialidad} 
+            onChange={(e) => onFiltroEspecialidadChange(e.target.value)}
+            className="filtro-select"
+          >
+            <option value="TODOS">Todos</option>
+            <option value="Plan Común">Plan Común</option>
+            <option value="ICI">ICI</option>
+            <option value="IOC">IOC</option>
+            <option value="ICE">ICE</option>
+            <option value="ICC">ICC</option>
+            <option value="ICA">ICA</option>
+            <option value="ICQ">ICQ</option>
+          </select>
+        </div>
+
+        <div className="filtro-group">
+          <label htmlFor="filtro-semestre">Semestre:</label>
+          <select 
+            id="filtro-semestre"
+            value={filtroSemestre} 
+            onChange={(e) => onFiltroSemestreChange(e.target.value)}
+            className="filtro-select"
+          >
+            <option value="TODOS">Todos</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+          </select>
+        </div>
+
+        {(filtroEspecialidad !== 'TODOS' || filtroSemestre !== 'TODOS') && (
+          <button 
+            className="limpiar-filtros-btn"
+            onClick={() => {
+              onFiltroEspecialidadChange('TODOS');
+              onFiltroSemestreChange('TODOS');
+            }}
+          >
+            Limpiar filtros
+          </button>
+        )}
       </div>
 
       <div className="cols">

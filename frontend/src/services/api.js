@@ -216,16 +216,14 @@ export const pruebasRegistradasService = {
     return res.json();
   },
 
-  async crear(pruebaProgramableId, dashboardId, fecha, horaInicio, horaFin) {
+  async crear(pruebaProgramableId, dashboardId, fecha) {
     const res = await fetch(`${API_URL}/pruebas-registradas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         pruebaProgramableId, 
         dashboardId, 
-        fecha,
-        horaInicio,
-        horaFin
+        fecha
       })
     });
     if (!res.ok) {
@@ -235,11 +233,11 @@ export const pruebasRegistradasService = {
     return res.json();
   },
 
-  async actualizar(id, fecha, horaInicio, horaFin) {
+  async actualizar(id, fecha) {
     const res = await fetch(`${API_URL}/pruebas-registradas/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fecha, horaInicio, horaFin })
+      body: JSON.stringify({ fecha })
     });
     if (!res.ok) {
       const err = await res.json();

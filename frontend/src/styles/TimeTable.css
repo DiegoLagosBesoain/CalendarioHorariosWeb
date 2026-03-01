@@ -115,37 +115,72 @@
 }
 
 .timetable-with-sidebar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, calc(30% - 8px));
   gap: 16px;
-  align-items: stretch;
   min-height: 600px;
   width: 100%;
-  flex: 1;
 }
 
 .timetable-with-sidebar .timetable-view {
-  flex: 1 1 calc(70% - 8px);
   min-width: 0;
   overflow-x: auto;
 }
 
 .sidebar-container {
-  flex: 0 0 calc(30% - 8px);
-  min-width: 280px;
-  max-height: calc(100vh - 280px);
+  position: relative;
+  overflow: hidden;
+}
+
+/* El hijo se posiciona absoluto para no inflar la altura de la fila del grid.
+   Solo el timetable determina la altura; el sidebar scrollea dentro. */
+.sidebar-container > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.sidebar-container > *::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar-container > *::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+.sidebar-container > *::-webkit-scrollbar-thumb {
+  background: #bbb;
+  border-radius: 4px;
+}
+
+.sidebar-container > *::-webkit-scrollbar-thumb:hover {
+  background: #999;
 }
 
 .sidebar-container .horarios-sidebar {
   margin-top: 0;
 }
 
+/* Dentro del contenedor capeado, dejar que .cols crezca con su contenido
+   en vez de recortarlo con flex:1 + overflow-y:hidden.
+   Así .horarios-sidebar desborda y muestra scrollbar. */
+.sidebar-container .cols {
+  flex: unset;
+  overflow-y: visible;
+}
+
 .placed-postit {
-  background: #fff9e6;
-  border-left: 4px solid #fdd835;
+  /* Color de fondo y borde se aplican dinámicamente desde el componente */
   padding: 8px;
   border-radius: 4px;
+  border-left-width: 4px;
+  border-left-style: solid;
   font-size: 11px;
   margin-bottom: 6px;
   position: relative;
@@ -155,8 +190,7 @@
 }
 
 .placed-postit.conflicting {
-  background: #ffeb3b;
-  border-left: 4px solid #ff9800;
+  /* El color de conflicto se aplica dinámicamente desde el componente */
   box-shadow: 0 0 8px rgba(255, 152, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.1);
   animation: pulse-warning 1.5s ease-in-out infinite;
 }
@@ -172,12 +206,12 @@
 
 .placed-postit:hover {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  background: #fffce6;
+  filter: brightness(1.05);
 }
 
 .placed-postit.conflicting:hover {
   box-shadow: 0 0 12px rgba(255, 152, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.15);
-  background: #ffee58;
+  filter: brightness(1.05);
 }
 
 .postit-content {

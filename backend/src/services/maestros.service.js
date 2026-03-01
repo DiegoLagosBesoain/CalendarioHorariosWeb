@@ -7,7 +7,9 @@ import { pool } from "../db/pool.js";
  * @returns {Promise<Object>} - Objeto del profesor {id, rut, nombre}
  */
 async function obtenerOCrearProfesor(rut, nombre) {
-  if (!rut || rut.trim() === '') {
+  // Convertir a string por si viene como número (RUT sin puntos ni guión)
+  const rutStr = rut != null ? String(rut).trim() : '';
+  if (!rutStr) {
     return null;
   }
 
@@ -15,7 +17,7 @@ async function obtenerOCrearProfesor(rut, nombre) {
     // Intentar obtener el profesor existente
     const resultado = await pool.query(
       `SELECT id, rut, nombre FROM profesores WHERE rut = $1`,
-      [rut.trim()]
+      [rutStr]
     );
 
     if (resultado.rows.length > 0) {
@@ -23,8 +25,9 @@ async function obtenerOCrearProfesor(rut, nombre) {
     }
 
     // Si no existe, crear nuevo
-    if (!nombre || nombre.trim() === '') {
-      console.warn(`Profesor con RUT ${rut} no tiene nombre, saltando...`);
+    const nombreStr = nombre != null ? String(nombre).trim() : '';
+    if (!nombreStr) {
+      console.warn(`Profesor con RUT ${rutStr} no tiene nombre, saltando...`);
       return null;
     }
 
@@ -32,10 +35,10 @@ async function obtenerOCrearProfesor(rut, nombre) {
       `INSERT INTO profesores (rut, nombre, disponibilidades)
        VALUES ($1, $2, $3)
        RETURNING id, rut, nombre`,
-      [rut.trim(), nombre.trim(), JSON.stringify({})]
+      [rutStr, nombreStr, JSON.stringify({})]
     );
 
-    console.log(`Creado nuevo profesor: ${rut} - ${nombre}`);
+    console.log(`Creado nuevo profesor: ${rutStr} - ${nombreStr}`);
     return nuevoProfesor.rows[0];
   } catch (error) {
     console.error(`Error obtener/crear profesor ${rut}:`, error);
@@ -44,9 +47,31 @@ async function obtenerOCrearProfesor(rut, nombre) {
 }
 
 /**
+ * Limpia números de semestre removiendo letras y convirtiendo a entero
+ * @param {string|number} semestre - Valor del semestre (ej: "11e", "11f", 9)
+ * @returns {number} - Número de semestre limpio o null
+ */
+function limpiarNumeroSemestre(semestre) {
+  if (!semestre && semestre !== 0) return null;
+  
+  // Si ya es número, usarlo directamente
+  if (typeof semestre === 'number') {
+    return Math.floor(semestre);
+  }
+  
+  // Si es string, remover todas las letras
+  if (typeof semestre === 'string') {
+    const numero = parseInt(semestre.replace(/[a-zA-Z]/g, ''), 10);
+    return isNaN(numero) ? null : numero;
+  }
+  
+  return null;
+}
+
+/**
  * Extrae especialidades del curso como diccionario
  * @param {Object} curso - Datos del curso
- * @returns {Object} - Diccionario con especialidades y sus semestres
+ * @returns {Object} - Diccionario con especialidades y sus semestres (limpios)
  */
 function extraerEspecialidades(curso) {
   const especialidadesMap = {
@@ -59,15 +84,52 @@ function extraerEspecialidades(curso) {
     ICC: curso["ICC"],
   };
 
-  // Filtrar solo las que tengan valor
+  // Filtrar y limpiar solo las que tengan valor
   const especialidades = {};
   for (const [clave, valor] of Object.entries(especialidadesMap)) {
     if (valor && valor !== "" && valor !== 0) {
-      especialidades[clave] = valor;
+      const semestreLimpio = limpiarNumeroSemestre(valor);
+      if (semestreLimpio !== null) {
+        especialidades[clave] = semestreLimpio;
+      }
     }
   }
 
   return especialidades;
+}
+
+/**
+ * Extrae disponibilidad horaria del profesor desde las columnas de días
+ * @param {Object} curso - Datos del curso (fila del spreadsheet)
+ * @returns {Object} - Diccionario { Lunes: ["9:30-10:20", ...], Martes: [...], ... }
+ */
+function extraerDisponibilidad(curso) {
+  const dias = ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES'];
+  const diasNormalizados = {
+    'LUNES': 'Lunes',
+    'MARTES': 'Martes',
+    'MIERCOLES': 'Miércoles',
+    'JUEVES': 'Jueves',
+    'VIERNES': 'Viernes'
+  };
+
+  const disponibilidad = {};
+
+  for (const dia of dias) {
+    const valor = curso[dia];
+    if (valor && typeof valor === 'string' && valor.trim() !== '') {
+      // Parsear formato: "9:30-10:20,10:30-11:20,..." o "9:30-10:20, 10:30-11:20, ..."
+      const bloques = valor.split(',')
+        .map(b => b.trim())
+        .filter(b => b.length > 0 && b.includes('-'));
+      
+      if (bloques.length > 0) {
+        disponibilidad[diasNormalizados[dia]] = bloques;
+      }
+    }
+  }
+
+  return disponibilidad;
 }
 
 /**
@@ -114,6 +176,9 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
       const prof2 = await obtenerOCrearProfesor(profesor2RUT, profesor2Nombre);
       const profLab = await obtenerOCrearProfesor(profesorLabRUT, profesorLabNombre);
 
+      // Extraer disponibilidad horaria del profesor desde columnas de días
+      const disponibilidad = extraerDisponibilidad(curso);
+
       // Crear entrada para CLASES si existe
       if (curso["Clases A PROGRAMAR"] && curso["Clases A PROGRAMAR"] > 0) {
         const horarioClase = await crearHorarioProgramable(
@@ -124,7 +189,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           especialidades,
           prof1?.id || null,
           prof2?.id || null,
-          titulo
+          titulo,
+          disponibilidad
         );
         horariosCreados.push(horarioClase);
       }
@@ -142,7 +208,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           especialidades,
           prof1?.id || null,
           prof2?.id || null,
-          titulo
+          titulo,
+          disponibilidad
         );
         horariosCreados.push(horarioAyudantia);
       }
@@ -161,7 +228,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           especialidades,
           profLab?.id || null,
           null,
-          titulo
+          titulo,
+          disponibilidad
         );
         horariosCreados.push(horarioLab);
       }
@@ -253,6 +321,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
  * @param {Object} especialidades - Diccionario de especialidades
  * @param {number} profesor1Id - ID del profesor 1
  * @param {number} profesor2Id - ID del profesor 2
+ * @param {string} titulo - Título del curso
+ * @param {Object} disponibilidad - Diccionario de disponibilidad horaria por día
  * @returns {Promise<Object>} - Registro creado
  */
 async function crearHorarioProgramable(
@@ -263,7 +333,8 @@ async function crearHorarioProgramable(
   especialidades,
   profesor1Id,
   profesor2Id,
-  titulo
+  titulo,
+  disponibilidad = {}
 ) {
   try {
     // Verificar si ya existe (por combinación de codigo, seccion, tipo_hora)
@@ -281,8 +352,8 @@ async function crearHorarioProgramable(
       const result = await pool.query(
         `UPDATE horas_programables 
          SET cantidad_horas = $1, profesor_1_id = $2, profesor_2_id = $3, 
-             especialidades_semestres = $4, titulo = $5, updated_at = NOW()
-         WHERE id = $6
+             especialidades_semestres = $4, titulo = $5, disponibilidad = $6, updated_at = NOW()
+         WHERE id = $7
          RETURNING *`,
         [
           cantidadHoras,
@@ -290,6 +361,7 @@ async function crearHorarioProgramable(
           profesor2Id,
           JSON.stringify(especialidades),
           titulo,
+          JSON.stringify(disponibilidad),
           existente.rows[0].id,
         ]
       );
@@ -299,8 +371,8 @@ async function crearHorarioProgramable(
     // Crear nuevo registro usando ON CONFLICT para manejar duplicados
     const result = await pool.query(
       `INSERT INTO horas_programables 
-       (codigo, seccion, tipo_hora, cantidad_horas, profesor_1_id, profesor_2_id, especialidades_semestres, titulo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (codigo, seccion, tipo_hora, cantidad_horas, profesor_1_id, profesor_2_id, especialidades_semestres, titulo, disponibilidad)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (codigo, seccion, tipo_hora) 
        DO UPDATE SET 
          cantidad_horas = $4,
@@ -308,6 +380,7 @@ async function crearHorarioProgramable(
          profesor_2_id = $6,
          especialidades_semestres = $7,
          titulo = $8,
+         disponibilidad = $9,
          updated_at = NOW()
        RETURNING *`,
       [
@@ -319,6 +392,7 @@ async function crearHorarioProgramable(
         profesor2Id,
         JSON.stringify(especialidades),
         titulo,
+        JSON.stringify(disponibilidad),
       ]
     );
 

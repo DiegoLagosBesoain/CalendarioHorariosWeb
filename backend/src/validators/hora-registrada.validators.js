@@ -175,6 +175,197 @@ function validarHorarioProtegido(dia, horaInicio, tipoHorario) {
   }
 }
 
+// Bloques de horario: inicio -> rango completo "inicio-fin"
+const BLOQUES_MAP = {
+  "8:30": "8:30-9:20",
+  "9:30": "9:30-10:20",
+  "10:30": "10:30-11:20",
+  "11:30": "11:30-12:20",
+  "12:30": "12:30-13:20",
+  "13:30": "13:30-14:20",
+  "14:30": "14:30-15:20",
+  "15:30": "15:30-16:20",
+  "16:30": "16:30-17:20",
+  "17:30": "17:30-18:20",
+  "18:30": "18:30-19:20",
+  "19:30": "19:30-20:20"
+};
+
+/**
+ * Normaliza hora de inicio: "09:30" -> "9:30" (remover leading zero)
+ */
+function normalizarHora(hora) {
+  if (!hora) return hora;
+  const [h, m] = hora.split(':');
+  return `${parseInt(h)}:${m}`;
+}
+
+/**
+ * Validador 3: Verificar disponibilidad del profesor
+ * Comprueba si el profesor asignado al curso está disponible en el día y bloque solicitado.
+ * La disponibilidad se almacena en horas_programables.disponibilidad como JSON:
+ *   { "Lunes": ["9:30-10:20", "10:30-11:20"], "Martes": [...], ... }
+ * Si no hay disponibilidad registrada, se permite (no bloquea).
+ */
+async function validarDisponibilidadProfesor(horaProgramableId, dia, horaInicio) {
+  try {
+    const result = await pool.query(
+      `SELECT hp.disponibilidad, hp.codigo, hp.seccion, hp.titulo,
+              p1.nombre as prof1_nombre, p2.nombre as prof2_nombre
+       FROM horas_programables hp
+       LEFT JOIN profesores p1 ON hp.profesor_1_id = p1.id
+       LEFT JOIN profesores p2 ON hp.profesor_2_id = p2.id
+       WHERE hp.id = $1`,
+      [horaProgramableId]
+    );
+
+    if (result.rows.length === 0) {
+      return { isValid: true };
+    }
+
+    const { disponibilidad, codigo, seccion, titulo, prof1_nombre, prof2_nombre } = result.rows[0];
+
+    // Si no hay disponibilidad registrada, permitir
+    if (!disponibilidad || Object.keys(disponibilidad).length === 0) {
+      return { isValid: true };
+    }
+
+    let disp = disponibilidad;
+    if (typeof disp === 'string') {
+      try { disp = JSON.parse(disp); } catch (e) { return { isValid: true }; }
+    }
+
+    // Obtener los bloques disponibles para ese día
+    const bloquesDisponibles = disp[dia];
+
+    // Si no hay datos para ese día, el profesor no tiene disponibilidad ese día
+    if (!bloquesDisponibles || !Array.isArray(bloquesDisponibles) || bloquesDisponibles.length === 0) {
+      const nombreProf = prof1_nombre || prof2_nombre || 'Profesor';
+      return {
+        isValid: false,
+        warning: `🚫 Disponibilidad: ${nombreProf} no tiene disponibilidad registrada el día ${dia} para ${titulo || codigo} Sección ${seccion}.`
+      };
+    }
+
+    // Construir el rango del bloque solicitado: "9:30-10:20"
+    const horaInicioNorm = normalizarHora(horaInicio);
+    const bloqueCompleto = BLOQUES_MAP[horaInicioNorm];
+
+    if (!bloqueCompleto) {
+      return { isValid: true }; // Bloque desconocido, no bloquear
+    }
+
+    // Verificar si el bloque está en la lista de disponibilidad
+    // Normalizar los bloques de disponibilidad para comparación
+    const bloquesNormalizados = bloquesDisponibles.map(b => {
+      const partes = b.split('-');
+      if (partes.length === 2) {
+        return `${normalizarHora(partes[0])}-${normalizarHora(partes[1])}`;
+      }
+      return b;
+    });
+
+    if (!bloquesNormalizados.includes(bloqueCompleto)) {
+      const nombreProf = prof1_nombre || prof2_nombre || 'Profesor';
+      return {
+        isValid: false,
+        warning: `🚫 Disponibilidad: ${nombreProf} no está disponible ${dia} ${bloqueCompleto} para ${titulo || codigo} Sección ${seccion}.`
+      };
+    }
+
+    return { isValid: true };
+  } catch (err) {
+    console.error('Error en validarDisponibilidadProfesor:', err);
+    return { isValid: true }; // No bloquear en caso de error
+  }
+}
+
+/**
+ * Validador 4: Prevenir doble asignación de profesor
+ * Verifica que el profesor asignado a esta hora no esté ya programado
+ * en el mismo día y bloque horario EN CUALQUIER dashboard y horario (los 4 timetables).
+ * Compara por profesor_1_id y profesor_2_id.
+ */
+async function validarDobleAsignacionProfesor(horaProgramableId, dashboardId, dia, horaInicio) {
+  try {
+    // Obtener los profesores del hora_programable que se quiere registrar
+    const progResult = await pool.query(
+      `SELECT hp.profesor_1_id, hp.profesor_2_id, hp.codigo, hp.seccion, hp.titulo,
+              p1.nombre as prof1_nombre, p2.nombre as prof2_nombre
+       FROM horas_programables hp
+       LEFT JOIN profesores p1 ON hp.profesor_1_id = p1.id
+       LEFT JOIN profesores p2 ON hp.profesor_2_id = p2.id
+       WHERE hp.id = $1`,
+      [horaProgramableId]
+    );
+
+    if (progResult.rows.length === 0) {
+      return { isValid: true };
+    }
+
+    const { profesor_1_id, profesor_2_id, codigo, seccion, titulo, prof1_nombre, prof2_nombre } = progResult.rows[0];
+
+    // Si no hay profesores asignados, no hay nada que validar
+    if (!profesor_1_id && !profesor_2_id) {
+      return { isValid: true };
+    }
+
+    // Construir lista de IDs de profesores a verificar
+    const profesorIds = [];
+    if (profesor_1_id) profesorIds.push(profesor_1_id);
+    if (profesor_2_id) profesorIds.push(profesor_2_id);
+
+    // Buscar todas las horas registradas en el mismo día y hora_inicio
+    // que tengan alguno de estos profesores asignados
+    // Busca en TODOS los dashboards y TODOS los horarios (4 timetables)
+    const conflictoResult = await pool.query(
+      `SELECT hr.id, hr.dashboard_id, hr.horario, hr.dia_semana, hr.hora_inicio,
+              hp.codigo as conflicto_codigo, hp.seccion as conflicto_seccion, 
+              hp.titulo as conflicto_titulo, hp.tipo_hora,
+              hp.profesor_1_id, hp.profesor_2_id,
+              p1.nombre as conflicto_prof1, p2.nombre as conflicto_prof2
+       FROM horas_registradas hr
+       JOIN horas_programables hp ON hr.hora_programable_id = hp.id
+       LEFT JOIN profesores p1 ON hp.profesor_1_id = p1.id
+       LEFT JOIN profesores p2 ON hp.profesor_2_id = p2.id
+       WHERE hr.dia_semana = $1
+       AND hr.hora_inicio = $2
+       AND (hp.profesor_1_id = ANY($3) OR hp.profesor_2_id = ANY($3))`,
+      [dia, horaInicio, profesorIds]
+    );
+
+    if (conflictoResult.rows.length === 0) {
+      return { isValid: true };
+    }
+
+    // Hay un conflicto - el profesor ya está asignado en ese bloque
+    const conflicto = conflictoResult.rows[0];
+    
+    // Determinar cuál profesor causa el conflicto
+    let nombreProfesorConflicto = '';
+    for (const profId of profesorIds) {
+      if (profId === conflicto.profesor_1_id || profId === conflicto.profesor_2_id) {
+        // Buscar nombre
+        if (profId === profesor_1_id) nombreProfesorConflicto = prof1_nombre || '';
+        else if (profId === profesor_2_id) nombreProfesorConflicto = prof2_nombre || '';
+        break;
+      }
+    }
+
+    const horaInicioNorm = normalizarHora(typeof horaInicio === 'string' ? horaInicio.substring(0, 5) : horaInicio);
+    const bloqueCompleto = BLOQUES_MAP[horaInicioNorm] || horaInicioNorm;
+
+    return {
+      isValid: false,
+      warning: `👨‍🏫 Doble asignación: ${nombreProfesorConflicto || 'El profesor'} ya está asignado en ${conflicto.conflicto_titulo || conflicto.conflicto_codigo} Sección ${conflicto.conflicto_seccion} (${conflicto.tipo_hora}) el ${dia} ${bloqueCompleto} (horario: ${conflicto.horario}).`,
+      conflictingHoraRegId: conflicto.id
+    };
+  } catch (err) {
+    console.error('Error en validarDobleAsignacionProfesor:', err);
+    return { isValid: true }; // No bloquear en caso de error
+  }
+}
+
 /**
  * Ejecutar todas las validaciones disponibles
  * Retorna { hasWarnings: boolean, warnings: string[], hasErrors: boolean, errors: string[], conflictIds: number[] }
@@ -207,6 +398,29 @@ async function ejecutarValidaciones(horaProgramableId, dashboardId, horario, dia
     errors.push(resultadoHorarioProtegido.error);
   }
 
+  // Validador 3: Disponibilidad del profesor
+  const resultadoDisponibilidad = await validarDisponibilidadProfesor(horaProgramableId, dia, horaInicio);
+  
+  if (!resultadoDisponibilidad.isValid && resultadoDisponibilidad.warning) {
+    warnings.push(resultadoDisponibilidad.warning);
+  }
+  if (resultadoDisponibilidad.error) {
+    errors.push(resultadoDisponibilidad.error);
+  }
+
+  // Validador 4: Doble asignación de profesor (across all dashboards/timetables)
+  const resultadoDobleAsignacion = await validarDobleAsignacionProfesor(horaProgramableId, dashboardId, dia, horaInicio);
+  
+  if (!resultadoDobleAsignacion.isValid && resultadoDobleAsignacion.warning) {
+    warnings.push(resultadoDobleAsignacion.warning);
+    if (resultadoDobleAsignacion.conflictingHoraRegId) {
+      conflictIds.push(resultadoDobleAsignacion.conflictingHoraRegId);
+    }
+  }
+  if (resultadoDobleAsignacion.error) {
+    errors.push(resultadoDobleAsignacion.error);
+  }
+
   return {
     hasWarnings: warnings.length > 0,
     warnings,
@@ -220,5 +434,7 @@ async function ejecutarValidaciones(horaProgramableId, dashboardId, horario, dia
 export {
   validarToquesDeSemestre,
   validarHorarioProtegido,
+  validarDisponibilidadProfesor,
+  validarDobleAsignacionProfesor,
   ejecutarValidaciones
 };

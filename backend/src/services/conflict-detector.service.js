@@ -1,0 +1,482 @@
+import { pool } from '../db/pool.js';
+
+/**
+ * Servicio centralizado para detectar y actualizar conflictos
+ * Este servicio re-evalúa TODOS los conflictos de un dashboard después de cualquier cambio
+ */
+
+// Bloques de horario: inicio -> rango completo "inicio-fin"
+const BLOQUES_MAP = {
+  "8:30": "8:30-9:20",
+  "9:30": "9:30-10:20",
+  "10:30": "10:30-11:20",
+  "11:30": "11:30-12:20",
+  "12:30": "12:30-13:20",
+  "13:30": "13:30-14:20",
+  "14:30": "14:30-15:20",
+  "15:30": "15:30-16:20",
+  "16:30": "16:30-17:20",
+  "17:30": "17:30-18:20",
+  "18:30": "18:30-19:20",
+  "19:30": "19:30-20:20"
+};
+
+/**
+ * Normaliza hora de inicio: "09:30" -> "9:30" (remover leading zero)
+ */
+function normalizarHora(hora) {
+  if (!hora) return hora;
+  const [h, m] = hora.split(':');
+  return `${parseInt(h)}:${m}`;
+}
+
+/**
+ * Re-evaluar TODOS los conflictos de un dashboard
+ * Limpia todos los conflictos existentes y los recalcula desde cero
+ */
+async function reevaluarConflictosDashboard(dashboardId) {
+  try {
+    // 1. Limpiar todos los conflictos del dashboard
+    await pool.query(
+      `UPDATE horas_registradas 
+       SET conflictos = '[]'::json 
+       WHERE dashboard_id = $1`,
+      [dashboardId]
+    );
+
+    // 2. Obtener todas las horas registradas del dashboard con su información completa
+    const result = await pool.query(
+      `SELECT 
+        hr.id as hora_reg_id,
+        hr.hora_programable_id,
+        hr.dia_semana,
+        hr.hora_inicio,
+        hr.hora_fin,
+        hr.horario,
+        hp.codigo,
+        hp.seccion,
+        hp.titulo,
+        hp.tipo_hora,
+        hp.especialidades_semestres,
+        hp.disponibilidad,
+        hp.profesor_1_id,
+        hp.profesor_2_id
+       FROM horas_registradas hr
+       JOIN horas_programables hp ON hr.hora_programable_id = hp.id
+       WHERE hr.dashboard_id = $1
+       ORDER BY hr.id`,
+      [dashboardId]
+    );
+
+    const horas = result.rows;
+    const conflictosPorHora = {}; // hora_reg_id -> [ids de horas en conflicto]
+
+    // 3. Detectar conflictos de toque de semestre
+    for (let i = 0; i < horas.length; i++) {
+      for (let j = i + 1; j < horas.length; j++) {
+        const hora1 = horas[i];
+        const hora2 = horas[j];
+
+        // Solo comparar si están en el mismo bloque horario
+        if (hora1.dia_semana === hora2.dia_semana && 
+            hora1.hora_inicio === hora2.hora_inicio &&
+            hora1.horario === hora2.horario) {
+          
+          // Skip si son del mismo curso (diferente sección)
+          if (hora1.codigo === hora2.codigo) {
+            continue;
+          }
+
+          // Extraer semestres de ambas horas
+          const semestres1 = extraerSemestres(hora1.especialidades_semestres);
+          const semestres2 = extraerSemestres(hora2.especialidades_semestres);
+
+          // Encontrar semestres comunes
+          const semestresComunes = semestres1.filter(s => semestres2.includes(s));
+
+          if (semestresComunes.length > 0) {
+            // Hay conflicto de toque de semestre
+            if (!conflictosPorHora[hora1.hora_reg_id]) {
+              conflictosPorHora[hora1.hora_reg_id] = [];
+            }
+            if (!conflictosPorHora[hora2.hora_reg_id]) {
+              conflictosPorHora[hora2.hora_reg_id] = [];
+            }
+            
+            conflictosPorHora[hora1.hora_reg_id].push(hora2.hora_reg_id);
+            conflictosPorHora[hora2.hora_reg_id].push(hora1.hora_reg_id);
+          }
+        }
+      }
+    }
+
+    // 4. Detectar conflictos de doble asignación de profesor
+    for (let i = 0; i < horas.length; i++) {
+      for (let j = i + 1; j < horas.length; j++) {
+        const hora1 = horas[i];
+        const hora2 = horas[j];
+
+        // Solo comparar si están en el mismo bloque horario
+        if (hora1.dia_semana === hora2.dia_semana && 
+            hora1.hora_inicio === hora2.hora_inicio) {
+          
+          // Verificar si comparten algún profesor
+          const prof1Ids = [hora1.profesor_1_id, hora1.profesor_2_id].filter(Boolean);
+          const prof2Ids = [hora2.profesor_1_id, hora2.profesor_2_id].filter(Boolean);
+          
+          const profesorComun = prof1Ids.find(p => prof2Ids.includes(p));
+
+          if (profesorComun) {
+            // Hay conflicto de doble asignación
+            if (!conflictosPorHora[hora1.hora_reg_id]) {
+              conflictosPorHora[hora1.hora_reg_id] = [];
+            }
+            if (!conflictosPorHora[hora2.hora_reg_id]) {
+              conflictosPorHora[hora2.hora_reg_id] = [];
+            }
+            
+            if (!conflictosPorHora[hora1.hora_reg_id].includes(hora2.hora_reg_id)) {
+              conflictosPorHora[hora1.hora_reg_id].push(hora2.hora_reg_id);
+            }
+            if (!conflictosPorHora[hora2.hora_reg_id].includes(hora1.hora_reg_id)) {
+              conflictosPorHora[hora2.hora_reg_id].push(hora1.hora_reg_id);
+            }
+          }
+        }
+      }
+    }
+
+    // 5. Actualizar el campo conflictos en la BD
+    for (const [horaRegId, conflictIds] of Object.entries(conflictosPorHora)) {
+      // Remover duplicados
+      const uniqueConflicts = [...new Set(conflictIds)];
+      
+      await pool.query(
+        `UPDATE horas_registradas 
+         SET conflictos = $1::json 
+         WHERE id = $2`,
+        [JSON.stringify(uniqueConflicts), horaRegId]
+      );
+    }
+
+    console.log(`[ConflictDetector] Re-evaluados conflictos para dashboard ${dashboardId}. Encontrados: ${Object.keys(conflictosPorHora).length} horas con conflictos`);
+    
+    return {
+      success: true,
+      totalHoras: horas.length,
+      horasConConflictos: Object.keys(conflictosPorHora).length
+    };
+
+  } catch (error) {
+    console.error('[ConflictDetector] Error re-evaluando conflictos:', error);
+    throw error;
+  }
+}
+
+/**
+ * Extrae los semestres de especialidades_semestres
+ * Maneja tanto array como objeto
+ */
+function extraerSemestres(especialidades_semestres) {
+  if (!especialidades_semestres) return [];
+
+  let esp = especialidades_semestres;
+  if (typeof esp === 'string') {
+    try {
+      esp = JSON.parse(esp);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  let semestres = [];
+  
+  if (Array.isArray(esp)) {
+    semestres = esp.map(e => {
+      const sem = e.semestre || e;
+      // Limpiar letras: "11e" -> 11
+      if (typeof sem === 'string') {
+        const num = parseInt(sem.replace(/[^0-9]/g, ''), 10);
+        return isNaN(num) ? null : num;
+      }
+      return sem;
+    }).filter(s => s !== null);
+  } else if (typeof esp === 'object') {
+    semestres = Object.values(esp).flat().map(sem => {
+      if (typeof sem === 'string') {
+        const num = parseInt(sem.replace(/[^0-9]/g, ''), 10);
+        return isNaN(num) ? null : num;
+      }
+      return sem;
+    }).filter(s => s !== null);
+  }
+
+  return semestres;
+}
+
+/**
+ * Verificar si una hora tiene conflictos de disponibilidad de profesor
+ * Retorna true si el profesor NO está disponible
+ */
+function tieneConflictoDisponibilidad(hora) {
+  try {
+    const { disponibilidad, dia_semana, hora_inicio } = hora;
+
+    if (!disponibilidad || Object.keys(disponibilidad).length === 0) {
+      return false; // Sin disponibilidad registrada, no hay conflicto
+    }
+
+    let disp = disponibilidad;
+    if (typeof disp === 'string') {
+      try { disp = JSON.parse(disp); } catch (e) { return false; }
+    }
+
+    const bloquesDisponibles = disp[dia_semana];
+
+    // Si no hay bloques para ese día, hay conflicto
+    if (!bloquesDisponibles || !Array.isArray(bloquesDisponibles) || bloquesDisponibles.length === 0) {
+      return true;
+    }
+
+    const horaInicioNorm = normalizarHora(hora_inicio);
+    const bloqueCompleto = BLOQUES_MAP[horaInicioNorm];
+
+    if (!bloqueCompleto) {
+      return false;
+    }
+
+    // Normalizar bloques de disponibilidad
+    const bloquesNorm = bloquesDisponibles.map(b => {
+      const partes = b.split('-');
+      if (partes.length === 2) {
+        return `${normalizarHora(partes[0])}-${normalizarHora(partes[1])}`;
+      }
+      return b;
+    });
+
+    // Verificar si el bloque está en la disponibilidad
+    return !bloquesNorm.includes(bloqueCompleto);
+
+  } catch (error) {
+    console.error('[ConflictDetector] Error verificando disponibilidad:', error);
+    return false;
+  }
+}
+
+/**
+ * Verificar si una hora está en horario protegido
+ * Retorna true si está en horario protegido
+ */
+function tieneConflictoHorarioProtegido(hora) {
+  try {
+    const { horario, dia_semana, hora_inicio } = hora;
+
+    // Solo aplica para plan_comun y 5to_6to
+    if (!['plan_comun', '5to_6to'].includes(horario)) {
+      return false;
+    }
+
+    const horariosProtegidos = {
+      'Martes': ['17:30', '18:30'],
+      'Miércoles': ['17:30', '18:30'],
+      'Viernes': ['10:30', '11:30', '12:30']
+    };
+
+    const horasProhibidas = horariosProtegidos[dia_semana] || [];
+    return horasProhibidas.includes(hora_inicio);
+
+  } catch (error) {
+    console.error('[ConflictDetector] Error verificando horario protegido:', error);
+    return false;
+  }
+}
+
+/**
+ * Re-evaluar TODOS los conflictos de pruebas de un dashboard
+ * Similar a horas, pero adaptado para pruebas con fechas
+ * Las pruebas solo tienen fecha y tipo_prueba (no hora_inicio/fin)
+ */
+async function reevaluarConflictosPruebasDashboard(dashboardId) {
+  try {
+    // 1. Limpiar todos los conflictos de pruebas del dashboard
+    await pool.query(
+      `UPDATE pruebas_registradas 
+       SET conflictos = '[]'::json 
+       WHERE dashboard_id = $1`,
+      [dashboardId]
+    );
+
+    // 2. Obtener todas las pruebas registradas del dashboard
+    const result = await pool.query(
+      `SELECT 
+        pr.id as prueba_reg_id,
+        pr.prueba_programable_id,
+        pr.fecha,
+        pp.codigo,
+        pp.seccion,
+        pp.titulo,
+        pp.tipo_prueba,
+        pp.especialidades_semestres,
+        pp.profesor_1_id,
+        pp.profesor_2_id
+       FROM pruebas_registradas pr
+       JOIN pruebas_programables pp ON pr.prueba_programable_id = pp.id
+       WHERE pr.dashboard_id = $1
+       ORDER BY pr.id`,
+      [dashboardId]
+    );
+
+    const pruebas = result.rows;
+    const conflictosPorPrueba = {}; // prueba_reg_id -> [ids de pruebas en conflicto]
+
+    // 3. Detectar conflictos de toque de semestre
+    // Las pruebas del mismo tipo en la misma fecha pueden tener conflicto de semestre
+    for (let i = 0; i < pruebas.length; i++) {
+      for (let j = i + 1; j < pruebas.length; j++) {
+        const prueba1 = pruebas[i];
+        const prueba2 = pruebas[j];
+
+        // Solo comparar si están en la misma fecha y tienen el mismo tipo
+        // (porque las pruebas del mismo tipo se realizan simultáneamente)
+        if (prueba1.fecha.getTime() === prueba2.fecha.getTime() && 
+            prueba1.tipo_prueba === prueba2.tipo_prueba) {
+          
+          // Skip si son del mismo curso
+          if (prueba1.codigo === prueba2.codigo) {
+            continue;
+          }
+
+          // Extraer semestres de ambas pruebas
+          const semestres1 = extraerSemestres(prueba1.especialidades_semestres);
+          const semestres2 = extraerSemestres(prueba2.especialidades_semestres);
+
+          // Encontrar semestres comunes
+          const semestresComunes = semestres1.filter(s => semestres2.includes(s));
+
+          if (semestresComunes.length > 0) {
+            // Hay conflicto de toque de semestre
+            if (!conflictosPorPrueba[prueba1.prueba_reg_id]) {
+              conflictosPorPrueba[prueba1.prueba_reg_id] = [];
+            }
+            if (!conflictosPorPrueba[prueba2.prueba_reg_id]) {
+              conflictosPorPrueba[prueba2.prueba_reg_id] = [];
+            }
+            
+            conflictosPorPrueba[prueba1.prueba_reg_id].push(prueba2.prueba_reg_id);
+            conflictosPorPrueba[prueba2.prueba_reg_id].push(prueba1.prueba_reg_id);
+          }
+        }
+      }
+    }
+
+    // 4. Detectar conflictos de doble asignación de profesor
+    // Solo si están en la misma fecha y tipo (porque coinciden en hora)
+    for (let i = 0; i < pruebas.length; i++) {
+      for (let j = i + 1; j < pruebas.length; j++) {
+        const prueba1 = pruebas[i];
+        const prueba2 = pruebas[j];
+
+        // Solo comparar si están en la misma fecha y tipo
+        if (prueba1.fecha.getTime() === prueba2.fecha.getTime() && 
+            prueba1.tipo_prueba === prueba2.tipo_prueba) {
+          
+          // Verificar si comparten algún profesor
+          const prof1Ids = [prueba1.profesor_1_id, prueba1.profesor_2_id].filter(Boolean);
+          const prof2Ids = [prueba2.profesor_1_id, prueba2.profesor_2_id].filter(Boolean);
+          
+          const profesorComun = prof1Ids.find(p => prof2Ids.includes(p));
+
+          if (profesorComun) {
+            // Hay conflicto de doble asignación
+            if (!conflictosPorPrueba[prueba1.prueba_reg_id]) {
+              conflictosPorPrueba[prueba1.prueba_reg_id] = [];
+            }
+            if (!conflictosPorPrueba[prueba2.prueba_reg_id]) {
+              conflictosPorPrueba[prueba2.prueba_reg_id] = [];
+            }
+            
+            if (!conflictosPorPrueba[prueba1.prueba_reg_id].includes(prueba2.prueba_reg_id)) {
+              conflictosPorPrueba[prueba1.prueba_reg_id].push(prueba2.prueba_reg_id);
+            }
+            if (!conflictosPorPrueba[prueba2.prueba_reg_id].includes(prueba1.prueba_reg_id)) {
+              conflictosPorPrueba[prueba2.prueba_reg_id].push(prueba1.prueba_reg_id);
+            }
+          }
+        }
+      }
+    }
+
+    // 5. Detectar conflictos de horarios protegidos
+    // SOLO para pruebas tipo TARDE en martes y miércoles
+    for (const prueba of pruebas) {
+      if (tieneConflictoHorarioProtegidoPrueba(prueba)) {
+        if (!conflictosPorPrueba[prueba.prueba_reg_id]) {
+          conflictosPorPrueba[prueba.prueba_reg_id] = [];
+        }
+        // Agregar -1 como indicador especial de horario protegido
+        if (!conflictosPorPrueba[prueba.prueba_reg_id].includes(-1)) {
+          conflictosPorPrueba[prueba.prueba_reg_id].push(-1);
+        }
+      }
+    }
+
+    // 6. Actualizar el campo conflictos en la BD
+    for (const [pruebaRegId, conflictIds] of Object.entries(conflictosPorPrueba)) {
+      // Remover duplicados
+      const uniqueConflicts = [...new Set(conflictIds)];
+      
+      await pool.query(
+        `UPDATE pruebas_registradas 
+         SET conflictos = $1::json 
+         WHERE id = $2`,
+        [JSON.stringify(uniqueConflicts), pruebaRegId]
+      );
+    }
+
+    console.log(`[ConflictDetector] Re-evaluados conflictos de pruebas para dashboard ${dashboardId}. Encontrados: ${Object.keys(conflictosPorPrueba).length} pruebas con conflictos`);
+    
+    return {
+      success: true,
+      totalPruebas: pruebas.length,
+      pruebasConConflictos: Object.keys(conflictosPorPrueba).length
+    };
+
+  } catch (error) {
+    console.error('[ConflictDetector] Error re-evaluando conflictos de pruebas:', error);
+    throw error;
+  }
+}
+
+/**
+ * Verificar si una prueba está en horario protegido
+ * SOLO aplica para tipo_prueba = 'TARDE' en Martes/Miércoles
+ */
+function tieneConflictoHorarioProtegidoPrueba(prueba) {
+  try {
+    const { tipo_prueba, fecha } = prueba;
+
+    // Solo aplica para pruebas tipo TARDE
+    if (tipo_prueba !== 'TARDE') {
+      return false;
+    }
+
+    // Obtener día de la semana (0=Domingo, 1=Lunes, ... 6=Sábado)
+    const diaSemana = fecha.getDay();
+    
+    // 2=Martes, 3=Miércoles
+    return [2, 3].includes(diaSemana);
+
+  } catch (error) {
+    console.error('[ConflictDetector] Error verificando horario protegido de prueba:', error);
+    return false;
+  }
+}
+
+export {
+  reevaluarConflictosDashboard,
+  reevaluarConflictosPruebasDashboard,
+  extraerSemestres,
+  tieneConflictoDisponibilidad,
+  tieneConflictoHorarioProtegido,
+  tieneConflictoHorarioProtegidoPrueba
+};

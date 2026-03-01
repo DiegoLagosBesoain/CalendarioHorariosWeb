@@ -1,5 +1,6 @@
 import express from 'express';
 import * as pruebasRegistradasService from '../services/pruebas-registradas.service.js';
+import { reevaluarConflictosPruebasDashboard } from '../services/conflict-detector.service.js';
 
 const router = express.Router();
 
@@ -47,23 +48,24 @@ router.get('/rango/:dashboardId', async (req, res) => {
 /**
  * POST /api/pruebas-registradas
  * Crear una nueva prueba registrada
- * Body: { pruebaProgramableId, dashboardId, fecha, horaInicio, horaFin }
+ * Body: { pruebaProgramableId, dashboardId, fecha }
  */
 router.post('/', async (req, res) => {
   try {
-    const { pruebaProgramableId, dashboardId, fecha, horaInicio, horaFin } = req.body;
+    const { pruebaProgramableId, dashboardId, fecha } = req.body;
 
-    if (!pruebaProgramableId || !dashboardId || !fecha || !horaInicio || !horaFin) {
+    if (!pruebaProgramableId || !dashboardId || !fecha) {
       return res.status(400).json({ error: 'Faltan parámetros requeridos' });
     }
 
     const pruebaRegistrada = await pruebasRegistradasService.crear(
       pruebaProgramableId,
       dashboardId,
-      fecha,
-      horaInicio,
-      horaFin
+      fecha
     );
+
+    // Re-evaluar conflictos del dashboard después de crear
+    await reevaluarConflictosPruebasDashboard(dashboardId);
 
     res.json({ pruebaRegistrada });
   } catch (err) {
@@ -75,23 +77,24 @@ router.post('/', async (req, res) => {
 /**
  * PUT /api/pruebas-registradas/:id
  * Actualizar una prueba registrada
- * Body: { fecha, horaInicio, horaFin }
+ * Body: { fecha }
  */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { fecha, horaInicio, horaFin } = req.body;
+    const { fecha } = req.body;
 
-    if (!fecha || !horaInicio || !horaFin) {
+    if (!fecha) {
       return res.status(400).json({ error: 'Faltan parámetros requeridos' });
     }
 
     const pruebaRegistrada = await pruebasRegistradasService.actualizar(
       id,
-      fecha,
-      horaInicio,
-      horaFin
+      fecha
     );
+
+    // Re-evaluar conflictos del dashboard después de actualizar
+    await reevaluarConflictosPruebasDashboard(pruebaRegistrada.dashboard_id);
 
     res.json({ pruebaRegistrada });
   } catch (err) {
@@ -108,14 +111,22 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Obtener dashboard_id antes de eliminar
+    const pruebaAntes = await pruebasRegistradasService.obtenerPorId(id);
+    
+    if (!pruebaAntes) {
+      return res.status(404).json({ error: 'Prueba registrada no encontrada' });
+    }
+    
+    const dashboardId = pruebaAntes.dashboard_id;
+    
     // Limpiar conflictos antes de eliminar
     await pruebasRegistradasService.limpiarConflictos(id);
     
     const pruebaRegistrada = await pruebasRegistradasService.eliminar(id);
 
-    if (!pruebaRegistrada) {
-      return res.status(404).json({ error: 'Prueba registrada no encontrada' });
-    }
+    // Re-evaluar conflictos del dashboard después de eliminar
+    await reevaluarConflictosPruebasDashboard(dashboardId);
 
     res.json({ message: 'Prueba registrada eliminada', pruebaRegistrada });
   } catch (err) {

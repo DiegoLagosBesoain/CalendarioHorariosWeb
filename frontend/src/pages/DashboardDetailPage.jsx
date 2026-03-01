@@ -28,6 +28,11 @@ export function DashboardDetailPage() {
   const [vistaActual, setVistaActual] = useState('horarios'); // 'horarios' o 'calendario'
   const [pruebasProgramables, setPruebasProgramables] = useState([]);
   const [pruebasRegistradas, setPruebasRegistradas] = useState([]);
+  
+  // Estados para filtros
+  const [filtroHorario, setFiltroHorario] = useState('plan_comun'); // plan_comun, 5to_6to, 7mo_mas
+  const [filtroEspecialidad, setFiltroEspecialidad] = useState('TODOS'); // ICI, IOC, ICE, ICC, ICA, ICQ, TODOS
+  const [filtroSemestre, setFiltroSemestre] = useState('TODOS'); // 1-11, TODOS
 
   useEffect(() => {
     loadDashboard();
@@ -88,6 +93,71 @@ export function DashboardDetailPage() {
     } catch (err) {
       console.error('Error cargando pruebas registradas:', err);
     }
+  };
+  
+  /**
+   * Función para filtrar horarios según especialidad y semestre
+   */
+  const filtrarHorario = (horario) => {
+    if (!horario.especialidades_semestres) return false;
+    
+    let esp = horario.especialidades_semestres;
+    if (typeof esp === 'string') {
+      try {
+        esp = JSON.parse(esp);
+      } catch (e) {
+        return false;
+      }
+    }
+    
+    // Si es "TODOS", mostrar todos los horarios
+    if (filtroEspecialidad === 'TODOS' && filtroSemestre === 'TODOS') {
+      return true;
+    }
+    
+    // Extraer las especialidades y semestres del horario
+    let especialidadesDelHorario = [];
+    
+    if (Array.isArray(esp)) {
+      especialidadesDelHorario = esp;
+    } else if (typeof esp === 'object') {
+      // Formato: {ICA: 9, IOC: 9} o {ICA: [9, 10]}
+      especialidadesDelHorario = Object.entries(esp).flatMap(([nombre, semestres]) => {
+        const sems = Array.isArray(semestres) ? semestres : [semestres];
+        return sems.map(sem => ({ nombre, semestre: sem }));
+      });
+    }
+    
+    // Filtrar según criterios
+    for (const item of especialidadesDelHorario) {
+      const nombreEsp = item.nombre || item;
+      const semestreNum = typeof item === 'object' ? item.semestre : item;
+      
+      // Limpiar semestre (remover letras)
+      let semestreLimpio = semestreNum;
+      if (typeof semestreNum === 'string') {
+        semestreLimpio = parseInt(semestreNum.replace(/[^0-9]/g, ''), 10);
+      }
+      if (typeof semestreLimpio === 'number') {
+        semestreLimpio = Math.floor(semestreLimpio);
+      }
+      
+      // Verificar si cumple con el filtro de especialidad
+      const cumpleEspecialidad = filtroEspecialidad === 'TODOS' || 
+        nombreEsp === filtroEspecialidad ||
+        nombreEsp === 'Plan Común' ||
+        nombreEsp === 'plan_comun';
+      
+      // Verificar si cumple con el filtro de semestre
+      const cumpleSemestre = filtroSemestre === 'TODOS' || 
+        semestreLimpio === parseInt(filtroSemestre);
+      
+      if (cumpleEspecialidad && cumpleSemestre) {
+        return true;
+      }
+    }
+    
+    return false;
   };
 
   useEffect(() => {
@@ -286,7 +356,16 @@ export function DashboardDetailPage() {
       <div className="dashboard-detail-layout">
         {vistaActual === 'horarios' ? (
           <main className="dashboard-detail-main">
-            <TimeTable dashboardId={parseInt(dashboardId)} horasRegistradas={horasRegistradas} horariosProgramables={horariosProgramables} />
+            <TimeTable 
+              dashboardId={parseInt(dashboardId)} 
+              horasRegistradas={horasRegistradas} 
+              horariosProgramables={horariosProgramables}
+              filtroEspecialidad={filtroEspecialidad}
+              filtroSemestre={filtroSemestre}
+              onFiltroEspecialidadChange={setFiltroEspecialidad}
+              onFiltroSemestreChange={setFiltroSemestre}
+              filtrarHorario={filtrarHorario}
+            />
           </main>
         ) : (
           <div className="calendario-layout">

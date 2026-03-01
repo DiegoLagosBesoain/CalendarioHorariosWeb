@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS profesores (
 -- TABLA 5: HORAS_PROGRAMABLES
 -- Template/Plantilla de horas que pueden ser programadas
 -- especialidades_semestres: JSON array con [{nombre: string, semestre: integer}, ...]
+-- disponibilidad: JSON con disponibilidad horaria del profesor por día
+--   Formato: { "Lunes": ["9:30-10:20", "10:30-11:20"], "Martes": [...], ... }
 CREATE TABLE IF NOT EXISTS horas_programables (
 
     id SERIAL PRIMARY KEY,
@@ -62,6 +64,7 @@ CREATE TABLE IF NOT EXISTS horas_programables (
     profesor_1_id INTEGER,
     profesor_2_id INTEGER,
     especialidades_semestres JSON DEFAULT '[]',
+    disponibilidad JSON DEFAULT '{}',
     sala_id INTEGER,
     sala_especial VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -114,13 +117,12 @@ CREATE TABLE IF NOT EXISTS pruebas_programables (
 
 -- TABLA 8: PRUEBAS_REGISTRADAS
 -- Registro de pruebas efectivamente programadas/asignadas
+-- NO tienen hora_inicio/hora_fin porque los bloques dependen del tipo_prueba
 CREATE TABLE IF NOT EXISTS pruebas_registradas (
     id SERIAL PRIMARY KEY,
     prueba_programable_id INTEGER NOT NULL,
     dashboard_id INTEGER NOT NULL,
     fecha DATE NOT NULL,
-    hora_inicio TIME NOT NULL,
-    hora_fin TIME NOT NULL,
     conflictos JSON DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -141,3 +143,36 @@ CREATE INDEX IF NOT EXISTS idx_pruebas_registradas_dashboard ON pruebas_registra
 CREATE INDEX IF NOT EXISTS idx_pruebas_programables_profesor1 ON pruebas_programables(profesor_1_id);
 CREATE INDEX IF NOT EXISTS idx_pruebas_programables_profesor2 ON pruebas_programables(profesor_2_id);
 CREATE INDEX IF NOT EXISTS idx_usuarios_mail ON usuarios(mail);
+
+-- ============================================================================
+-- MIGRACIONES (ALTER TABLE para tablas existentes)
+-- ============================================================================
+
+-- Agregar columna disponibilidad a horas_programables si no existe
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'horas_programables' AND column_name = 'disponibilidad'
+  ) THEN
+    ALTER TABLE horas_programables ADD COLUMN disponibilidad JSON DEFAULT '{}';
+  END IF;
+END $$;
+
+-- Eliminar columnas hora_inicio y hora_fin de pruebas_registradas si existen
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'pruebas_registradas' AND column_name = 'hora_inicio'
+  ) THEN
+    ALTER TABLE pruebas_registradas DROP COLUMN hora_inicio;
+  END IF;
+  
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'pruebas_registradas' AND column_name = 'hora_fin'
+  ) THEN
+    ALTER TABLE pruebas_registradas DROP COLUMN hora_fin;
+  END IF;
+END $$;
