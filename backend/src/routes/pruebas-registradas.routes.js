@@ -1,4 +1,5 @@
 import express from 'express';
+import { pool } from '../db/pool.js';
 import * as pruebasRegistradasService from '../services/pruebas-registradas.service.js';
 import { reevaluarConflictosPruebasDashboard } from '../services/conflict-detector.service.js';
 
@@ -48,20 +49,54 @@ router.get('/rango/:dashboardId', async (req, res) => {
 /**
  * POST /api/pruebas-registradas
  * Crear una nueva prueba registrada
- * Body: { pruebaProgramableId, dashboardId, fecha }
+ * Body: { pruebaProgramableId, dashboardId, fecha, horaInicio, horaFin }
  */
 router.post('/', async (req, res) => {
   try {
-    const { pruebaProgramableId, dashboardId, fecha } = req.body;
+    const { pruebaProgramableId, dashboardId, fecha, horaInicio, horaFin } = req.body;
 
     if (!pruebaProgramableId || !dashboardId || !fecha) {
       return res.status(400).json({ error: 'Faltan parámetros requeridos' });
     }
 
+    // Validar cantidad_evaluaciones: contar pruebas registradas del mismo curso (codigo+seccion)
+    // excluyendo EXAMEN del conteo
+    const ppResult = await pool.query(
+      'SELECT codigo, seccion, tipo_prueba, cantidad_evaluaciones FROM pruebas_programables WHERE id = $1',
+      [pruebaProgramableId]
+    );
+
+    if (ppResult.rows.length > 0) {
+      const pp = ppResult.rows[0];
+      const tipoPrueba = (pp.tipo_prueba || '').toUpperCase();
+      
+      // Solo validar si no es EXAMEN y hay un límite definido
+      if (tipoPrueba !== 'EXAMEN' && pp.cantidad_evaluaciones != null) {
+        // Contar pruebas registradas del mismo curso (codigo+seccion) en este dashboard, excluyendo EXAMEN
+        const countResult = await pool.query(
+          `SELECT COUNT(*) as total FROM pruebas_registradas pr
+           JOIN pruebas_programables pp2 ON pr.prueba_programable_id = pp2.id
+           WHERE pr.dashboard_id = $1 
+             AND pp2.codigo = $2 AND pp2.seccion = $3
+             AND UPPER(pp2.tipo_prueba) != 'EXAMEN'`,
+          [dashboardId, pp.codigo, pp.seccion]
+        );
+
+        const totalActual = parseInt(countResult.rows[0].total, 10);
+        if (totalActual >= pp.cantidad_evaluaciones) {
+          return res.status(400).json({ 
+            error: `Límite de evaluaciones alcanzado para ${pp.codigo}-${pp.seccion}. Máximo: ${pp.cantidad_evaluaciones}, Actual: ${totalActual}` 
+          });
+        }
+      }
+    }
+
     const pruebaRegistrada = await pruebasRegistradasService.crear(
       pruebaProgramableId,
       dashboardId,
-      fecha
+      fecha,
+      horaInicio || null,
+      horaFin || null
     );
 
     // Re-evaluar conflictos del dashboard después de crear
@@ -77,12 +112,12 @@ router.post('/', async (req, res) => {
 /**
  * PUT /api/pruebas-registradas/:id
  * Actualizar una prueba registrada
- * Body: { fecha }
+ * Body: { fecha, horaInicio, horaFin }
  */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { fecha } = req.body;
+    const { fecha, horaInicio, horaFin } = req.body;
 
     if (!fecha) {
       return res.status(400).json({ error: 'Faltan parámetros requeridos' });
@@ -90,7 +125,9 @@ router.put('/:id', async (req, res) => {
 
     const pruebaRegistrada = await pruebasRegistradasService.actualizar(
       id,
-      fecha
+      fecha,
+      horaInicio !== undefined ? horaInicio : null,
+      horaFin !== undefined ? horaFin : null
     );
 
     // Re-evaluar conflictos del dashboard después de actualizar

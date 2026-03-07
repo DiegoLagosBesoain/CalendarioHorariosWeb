@@ -1,9 +1,17 @@
 /* Calendar View Styles */
+
+/* ── Container principal ── */
+.calendar-container {
+  width: 100%;
+}
+
 .calendar-view {
   background: white;
   padding: 30px;
   border-radius: 10px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  flex: 1;
+  min-width: 0;
 }
 
 .empty-calendar-message {
@@ -27,9 +35,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
   gap: 20px;
   flex-wrap: wrap;
+  background: white;
+  padding: 20px 30px;
+  border-radius: 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
 }
 
 .calendar-header .nav-btn,
@@ -227,10 +239,13 @@
   justify-content: center;
   gap: 30px;
   margin-top: 25px;
-  padding-top: 20px;
+  padding: 20px;
   border-top: 1px solid #e0e0e0;
   flex-wrap: wrap;
   align-items: center;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
 }
 
 .legend-item {
@@ -263,6 +278,59 @@
 
 .pruebas-legend {
   background: #ff5722;
+}
+
+/* Feriado styles */
+.day.feriado {
+  background: #ffebee !important;
+  border: 2px solid #ef5350 !important;
+}
+
+.day.feriado.today {
+  background: #ffcdd2 !important;
+  border: 2px solid #e53935 !important;
+}
+
+.feriado-toggle {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 20px;
+  text-align: center;
+  padding: 0;
+  border-radius: 50%;
+  opacity: 0.4;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 2;
+}
+
+.feriado-toggle:hover {
+  opacity: 1;
+  transform: scale(1.3);
+}
+
+.feriado-toggle.active {
+  opacity: 1;
+}
+
+.feriado-label {
+  font-size: 8px;
+  font-weight: 700;
+  color: #e53935;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.feriado-legend {
+  background: #ef5350;
 }
 
 /* Pruebas en el calendario */
@@ -347,6 +415,17 @@
   font-style: italic;
   opacity: 0.7;
   text-transform: uppercase;
+}
+
+.prueba-horario {
+  font-size: 9px;
+  font-weight: 700;
+  color: #333;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 1px 4px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-top: 1px;
 }
 
 .prueba-remove-btn {
@@ -461,5 +540,183 @@
   .legend-color {
     width: 16px;
     height: 16px;
+  }
+}
+
+/* ── Controles de vista (cascada/paginado + tabs de semestre) ── */
+.calendar-controls {
+  background: white;
+  padding: 12px 20px;
+  border-radius: 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.calendar-controls .view-mode-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.calendar-controls .mode-btn {
+  padding: 8px 16px;
+  border: 2px solid #ddd;
+  background: white;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  color: #666;
+  transition: all 0.3s;
+}
+
+.calendar-controls .mode-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.calendar-controls .mode-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: transparent;
+}
+
+.calendar-controls .semester-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.calendar-controls .semester-btn {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.3s;
+}
+
+.calendar-controls .semester-btn:hover {
+  background: #f5f5f5;
+}
+
+.calendar-controls .semester-btn.active {
+  border-bottom-width: 3px;
+}
+
+/* ── Título de semestre sobre cada calendario ── */
+.calendar-semester-title {
+  margin: 0 0 15px 0;
+  padding-bottom: 10px;
+  border-bottom: 3px solid;
+  font-size: 18px;
+  color: #333;
+}
+
+/* ── Layout cascada ── */
+.calendar-cascade {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+/* ── Layout paginado ── */
+.calendar-paginated {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Calendario + Sidebar (cada semestre) ── */
+.calendar-with-sidebar {
+  display: grid;
+  grid-template-columns: 60% minmax(0, calc(40% - 20px));
+  gap: 20px;
+  width: 100%;
+}
+
+.calendar-sidebar-container {
+  position: relative;
+  overflow: hidden;
+}
+
+/* El sidebar se posiciona absoluto para que el calendario determine la altura */
+.calendar-sidebar-container > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.calendar-sidebar-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.calendar-sidebar-container::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+.calendar-sidebar-container::-webkit-scrollbar-thumb {
+  background: #bbb;
+  border-radius: 4px;
+}
+
+.calendar-sidebar-container::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+/* ── Day mismatch warning ── */
+.prueba-tag.day-mismatch {
+  box-shadow: 0 0 8px rgba(33, 150, 243, 0.6), 0 1px 2px rgba(0, 0, 0, 0.1);
+  animation: pulse-day-mismatch 2s ease-in-out infinite;
+}
+
+.prueba-tag.day-mismatch:hover {
+  box-shadow: 0 0 12px rgba(33, 150, 243, 0.8), 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.prueba-day-warning {
+  font-size: 8px;
+  font-weight: 700;
+  color: #1565c0;
+  background: rgba(33, 150, 243, 0.15);
+  padding: 1px 4px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-top: 1px;
+}
+
+@keyframes pulse-day-mismatch {
+  0%, 100% { box-shadow: 0 0 4px rgba(33, 150, 243, 0.4); }
+  50% { box-shadow: 0 0 12px rgba(33, 150, 243, 0.7); }
+}
+
+.day-mismatch-legend {
+  background: #2196f3;
+}
+
+/* ── Responsivo para calendar-with-sidebar ── */
+@media (max-width: 1200px) {
+  .calendar-with-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-sidebar-container {
+    position: static;
+    overflow: visible;
+  }
+
+  .calendar-sidebar-container > * {
+    position: static;
+    overflow-y: visible;
   }
 }

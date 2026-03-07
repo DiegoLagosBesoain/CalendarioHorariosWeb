@@ -3,12 +3,12 @@ import { pool } from '../db/pool.js';
 /**
  * Crear una nueva prueba registrada
  */
-async function crear(pruebaProgramableId, dashboardId, fecha) {
+async function crear(pruebaProgramableId, dashboardId, fecha, horaInicio = null, horaFin = null) {
   const result = await pool.query(
-    `INSERT INTO pruebas_registradas (prueba_programable_id, dashboard_id, fecha)
-     VALUES ($1, $2, $3)
+    `INSERT INTO pruebas_registradas (prueba_programable_id, dashboard_id, fecha, hora_inicio, hora_fin)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [pruebaProgramableId, dashboardId, fecha]
+    [pruebaProgramableId, dashboardId, fecha, horaInicio, horaFin]
   );
 
   return result.rows[0];
@@ -19,7 +19,7 @@ async function crear(pruebaProgramableId, dashboardId, fecha) {
  */
 async function obtenerPorDashboard(dashboardId) {
   const result = await pool.query(
-    `SELECT pr.*, pp.codigo, pp.seccion, pp.titulo, pp.tipo_prueba, pp.especialidades_semestres
+    `SELECT pr.*, pp.codigo, pp.seccion, pp.titulo, pp.tipo_prueba, pp.especialidades_semestres, pp.bloques_horario, pp.tiene_examen, pp.cantidad_evaluaciones
      FROM pruebas_registradas pr
      JOIN pruebas_programables pp ON pr.prueba_programable_id = pp.id
      WHERE pr.dashboard_id = $1
@@ -35,7 +35,7 @@ async function obtenerPorDashboard(dashboardId) {
  */
 async function obtenerPorId(id) {
   const result = await pool.query(
-    `SELECT pr.*, pp.codigo, pp.seccion, pp.titulo, pp.tipo_prueba, pp.especialidades_semestres
+    `SELECT pr.*, pp.codigo, pp.seccion, pp.titulo, pp.tipo_prueba, pp.especialidades_semestres, pp.bloques_horario, pp.tiene_examen, pp.cantidad_evaluaciones
      FROM pruebas_registradas pr
      JOIN pruebas_programables pp ON pr.prueba_programable_id = pp.id
      WHERE pr.id = $1`,
@@ -48,13 +48,13 @@ async function obtenerPorId(id) {
 /**
  * Actualizar una prueba registrada (cuando se cambia de fecha)
  */
-async function actualizar(id, fecha) {
+async function actualizar(id, fecha, horaInicio = null, horaFin = null) {
   const result = await pool.query(
     `UPDATE pruebas_registradas
-     SET fecha = $1, updated_at = CURRENT_TIMESTAMP
-     WHERE id = $2
+     SET fecha = $1, hora_inicio = $2, hora_fin = $3, updated_at = CURRENT_TIMESTAMP
+     WHERE id = $4
      RETURNING *`,
-    [fecha, id]
+    [fecha, horaInicio, horaFin, id]
   );
 
   return result.rows[0];

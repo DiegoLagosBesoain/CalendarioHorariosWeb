@@ -56,6 +56,70 @@
   background: #ddd;
 }
 
+/* ── Filtros (misma estructura que HorariosSidebar) ── */
+.pruebas-sidebar .filtros-section {
+  margin-bottom: 12px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+}
+
+.pruebas-sidebar .filtros-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  color: #555;
+}
+
+.pruebas-sidebar .filtro-group {
+  margin-bottom: 8px;
+}
+
+.pruebas-sidebar .filtro-group label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 3px;
+}
+
+.pruebas-sidebar .filtro-select {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background: white;
+  color: #333;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.pruebas-sidebar .filtro-select:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
+}
+
+.pruebas-sidebar .limpiar-filtros-btn {
+  width: 100%;
+  padding: 5px 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e53935;
+  background: #fff;
+  border: 1px solid #e53935;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pruebas-sidebar .limpiar-filtros-btn:hover {
+  background: #e53935;
+  color: white;
+}
+
 .pruebas-cols {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -155,6 +219,39 @@
   border-radius: 3px;
 }
 
+/* Bloque horario (dropdown / texto fijo) */
+.prueba-postit-bloque {
+  margin-top: 4px;
+  font-size: 9px;
+}
+
+.prueba-postit-bloque .bloque-unico {
+  display: block;
+  text-align: center;
+  color: #555;
+  font-weight: 600;
+  padding: 2px 4px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 3px;
+}
+
+.prueba-postit-bloque .bloque-select {
+  width: 100%;
+  font-size: 9px;
+  padding: 2px 3px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #333;
+  cursor: pointer;
+  outline: none;
+}
+
+.prueba-postit-bloque .bloque-select:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 1px rgba(102, 126, 234, 0.3);
+}
+
 /* Colores específicos por tipo de prueba */
 .prueba-col:nth-child(1) .prueba-postit {
   /* CLASE - Azul */
@@ -184,6 +281,35 @@
   /* TARDE - Morado */
   background: #e1bee7;
   border-left-color: #9c27b0;
+}
+
+/* Evaluaciones counter badge */
+.eval-counter {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  color: #333;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.eval-counter.full {
+  background: #ef5350;
+  color: white;
+}
+
+/* Limit reached state */
+.prueba-postit.limit-reached {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+  filter: grayscale(0.5);
+}
+
+.prueba-postit.limit-reached:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 /* Responsivo */

@@ -6,6 +6,7 @@ import {
   limpiarHorariosProgramables,
   obtenerPruebasProgramables,
   limpiarPruebasProgramables,
+  actualizarCalendarioPruebas,
 } from "../services/maestros.service.js";
 
 const router = express.Router();
@@ -167,6 +168,32 @@ router.delete("/pruebas-programables", async (req, res) => {
     });
   } catch (err) {
     console.error("Error limpiando pruebas-programables:", err);
+    res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * POST /api/sheets/actualizar-calendario/:dashboardId
+ * Crea/actualiza pruebas programables de CLASE, AYUDANTIA y LAB/TALLER
+ * basándose en las horas registradas del dashboard
+ */
+router.post("/actualizar-calendario/:dashboardId", async (req, res) => {
+  try {
+    const { dashboardId } = req.params;
+    const { pruebasCreadas, eliminadas } = await actualizarCalendarioPruebas(parseInt(dashboardId));
+    const todasLasPruebas = await obtenerPruebasProgramables();
+    res.json({
+      ok: true,
+      mensaje: `Se crearon/actualizaron ${pruebasCreadas.length} pruebas programables desde el horario`,
+      pruebasCreadas,
+      eliminadas,
+      pruebas: todasLasPruebas,
+    });
+  } catch (err) {
+    console.error("Error en actualizar-calendario:", err);
     res.status(500).json({
       ok: false,
       error: err.message,

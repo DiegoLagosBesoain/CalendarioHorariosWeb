@@ -101,6 +101,16 @@ export const dashboardService = {
     });
     if (!res.ok) throw new Error('Error actualizando dashboard');
     return res.json();
+  },
+
+  async toggleFeriado(dashboardId, fecha) {
+    const res = await fetch(`${API_URL}/dashboards/${dashboardId}/feriados`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fecha })
+    });
+    if (!res.ok) throw new Error('Error toggling feriado');
+    return res.json();
   }
 };
 
@@ -199,6 +209,18 @@ export const pruebasProgramablesService = {
     });
     if (!res.ok) throw new Error('Error limpiando pruebas');
     return res.json();
+  },
+
+  async actualizarCalendario(dashboardId) {
+    const res = await fetch(`${API_URL}/sheets/actualizar-calendario/${dashboardId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Error actualizando calendario');
+    }
+    return res.json();
   }
 };
 
@@ -216,14 +238,16 @@ export const pruebasRegistradasService = {
     return res.json();
   },
 
-  async crear(pruebaProgramableId, dashboardId, fecha) {
+  async crear(pruebaProgramableId, dashboardId, fecha, horaInicio = null, horaFin = null) {
     const res = await fetch(`${API_URL}/pruebas-registradas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         pruebaProgramableId, 
         dashboardId, 
-        fecha
+        fecha,
+        horaInicio,
+        horaFin
       })
     });
     if (!res.ok) {
@@ -233,11 +257,11 @@ export const pruebasRegistradasService = {
     return res.json();
   },
 
-  async actualizar(id, fecha) {
+  async actualizar(id, fecha, horaInicio = null, horaFin = null) {
     const res = await fetch(`${API_URL}/pruebas-registradas/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fecha })
+      body: JSON.stringify({ fecha, horaInicio, horaFin })
     });
     if (!res.ok) {
       const err = await res.json();

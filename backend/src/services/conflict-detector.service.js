@@ -312,11 +312,14 @@ async function reevaluarConflictosPruebasDashboard(dashboardId) {
         pr.id as prueba_reg_id,
         pr.prueba_programable_id,
         pr.fecha,
+        pr.hora_inicio,
+        pr.hora_fin,
         pp.codigo,
         pp.seccion,
         pp.titulo,
         pp.tipo_prueba,
         pp.especialidades_semestres,
+        pp.bloques_horario,
         pp.profesor_1_id,
         pp.profesor_2_id
        FROM pruebas_registradas pr
@@ -416,6 +419,41 @@ async function reevaluarConflictosPruebasDashboard(dashboardId) {
         // Agregar -1 como indicador especial de horario protegido
         if (!conflictosPorPrueba[prueba.prueba_reg_id].includes(-1)) {
           conflictosPorPrueba[prueba.prueba_reg_id].push(-1);
+        }
+      }
+    }
+
+    // 5b. Detectar conflictos de día no coincidente
+    // Para pruebas tipo CLASE, AYUDANTIA, LAB/TALLER: verificar si la fecha cae en un día
+    // que coincide con los días del horario (bloques_horario)
+    const diasSemanaMap = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    for (const prueba of pruebas) {
+      const tipoPrueba = (prueba.tipo_prueba || '').toUpperCase();
+      // Solo aplica para CLASE, AYUDANTIA, LAB/TALLER
+      if (!['CLASE', 'AYUDANTIA', 'LAB/TALLER'].includes(tipoPrueba)) continue;
+
+      let bloques = prueba.bloques_horario;
+      if (!bloques) continue;
+      if (typeof bloques === 'string') {
+        try { bloques = JSON.parse(bloques); } catch(e) { continue; }
+      }
+      if (!Array.isArray(bloques) || bloques.length === 0) continue;
+
+      // Obtener los días del horario desde los bloques
+      const diasHorario = [...new Set(bloques.map(b => b.dia).filter(Boolean))];
+      if (diasHorario.length === 0) continue;
+
+      // Obtener día de la fecha de la prueba
+      const diaFecha = diasSemanaMap[prueba.fecha.getDay()];
+
+      // Verificar si el día coincide
+      if (!diasHorario.includes(diaFecha)) {
+        if (!conflictosPorPrueba[prueba.prueba_reg_id]) {
+          conflictosPorPrueba[prueba.prueba_reg_id] = [];
+        }
+        // -2 como indicador especial de día no coincidente
+        if (!conflictosPorPrueba[prueba.prueba_reg_id].includes(-2)) {
+          conflictosPorPrueba[prueba.prueba_reg_id].push(-2);
         }
       }
     }

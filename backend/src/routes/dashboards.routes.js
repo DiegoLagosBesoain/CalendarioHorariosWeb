@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT id, nombre, usuario_id, fecha_inicio, fecha_fin, created_at, updated_at FROM dashboards WHERE usuario_id = $1 ORDER BY created_at DESC',
+      'SELECT id, nombre, usuario_id, fecha_inicio, fecha_fin, feriados, created_at, updated_at FROM dashboards WHERE usuario_id = $1 ORDER BY created_at DESC',
       [usuario_id]
     );
 
@@ -30,7 +30,7 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      'SELECT id, nombre, usuario_id, fecha_inicio, fecha_fin, created_at, updated_at FROM dashboards WHERE id = $1',
+      'SELECT id, nombre, usuario_id, fecha_inicio, fecha_fin, feriados, created_at, updated_at FROM dashboards WHERE id = $1',
       [id]
     );
 
@@ -67,7 +67,7 @@ router.post('/', async (req, res) => {
     const result = await pool.query(
       `INSERT INTO dashboards (nombre, usuario_id, fecha_inicio, fecha_fin)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, nombre, usuario_id, fecha_inicio, fecha_fin, created_at, updated_at`,
+       RETURNING id, nombre, usuario_id, fecha_inicio, fecha_fin, feriados, created_at, updated_at`,
       [nombre, usuario_id, fecha_inicio || null, fecha_fin || null]
     );
 
@@ -111,7 +111,7 @@ router.put('/:id', async (req, res) => {
     valores.push(id);
 
     const result = await pool.query(
-      `UPDATE dashboards SET ${campos.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${index} RETURNING id, nombre, usuario_id, fecha_inicio, fecha_fin, created_at, updated_at`,
+      `UPDATE dashboards SET ${campos.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $${index} RETURNING id, nombre, usuario_id, fecha_inicio, fecha_fin, feriados, created_at, updated_at`,
       valores
     );
 
@@ -143,6 +143,52 @@ router.delete('/:id', async (req, res) => {
     res.json({ message: 'Dashboard eliminado exitosamente', id });
   } catch (error) {
     console.error('Error eliminando dashboard:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Toggle feriado en un dashboard (agregar o quitar una fecha de la lista)
+router.patch('/:id/feriados', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fecha } = req.body; // formato YYYY-MM-DD
+
+    if (!fecha) {
+      return res.status(400).json({ error: 'fecha es requerida (formato YYYY-MM-DD)' });
+    }
+
+    // Obtener feriados actuales
+    const current = await pool.query(
+      'SELECT feriados FROM dashboards WHERE id = $1',
+      [id]
+    );
+
+    if (current.rows.length === 0) {
+      return res.status(404).json({ error: 'Dashboard no encontrado' });
+    }
+
+    let feriados = current.rows[0].feriados || [];
+    if (typeof feriados === 'string') {
+      try { feriados = JSON.parse(feriados); } catch (e) { feriados = []; }
+    }
+
+    // Toggle: si ya existe, quitar; si no, agregar
+    const index = feriados.indexOf(fecha);
+    if (index >= 0) {
+      feriados.splice(index, 1);
+    } else {
+      feriados.push(fecha);
+    }
+
+    const result = await pool.query(
+      `UPDATE dashboards SET feriados = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2
+       RETURNING id, nombre, usuario_id, fecha_inicio, fecha_fin, feriados, created_at, updated_at`,
+      [JSON.stringify(feriados), id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error toggling feriado:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });

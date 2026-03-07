@@ -10,7 +10,6 @@ import {
 } from '../services/api';
 import { TimeTable } from '../components/TimeTable';
 import { CalendarView } from '../components/CalendarView';
-import { PruebasSidebar } from '../components/PruebasSidebar';
 import '../styles/DashboardDetail.css';
 
 export function DashboardDetailPage() {
@@ -28,6 +27,7 @@ export function DashboardDetailPage() {
   const [vistaActual, setVistaActual] = useState('horarios'); // 'horarios' o 'calendario'
   const [pruebasProgramables, setPruebasProgramables] = useState([]);
   const [pruebasRegistradas, setPruebasRegistradas] = useState([]);
+  const [feriados, setFeriados] = useState([]);
   
   // Estados para filtros
   const [filtroHorario, setFiltroHorario] = useState('plan_comun'); // plan_comun, 5to_6to, 7mo_mas
@@ -50,6 +50,12 @@ export function DashboardDetailPage() {
       }
       
       setDashboard(found);
+      // Parsear feriados del dashboard
+      let feriadosList = found.feriados || [];
+      if (typeof feriadosList === 'string') {
+        try { feriadosList = JSON.parse(feriadosList); } catch (e) { feriadosList = []; }
+      }
+      setFeriados(feriadosList);
       // TODO: Cargo de horas registradas cuando esté disponible
       setHorasRegistradas([]);
     } catch (err) {
@@ -207,6 +213,44 @@ export function DashboardDetailPage() {
     }
   };
 
+  const handleActualizarCalendario = async () => {
+    try {
+      setCargandoDatos(true);
+      setError('');
+      
+      // Actualizar el calendario de pruebas basado en horas registradas
+      const respuesta = await pruebasProgramablesService.actualizarCalendario(dashboardId);
+      
+      // Actualizar las pruebas programables en el estado
+      setPruebasProgramables(respuesta.pruebas || []);
+      
+      // Si se eliminaron pruebas registradas con bloques obsoletos, recargar
+      const eliminadas = respuesta.eliminadas || [];
+      if (eliminadas.length > 0) {
+        await cargarPruebasRegistradas();
+      }
+      
+      // Construir mensaje del popup
+      let msg = respuesta.mensaje;
+      if (eliminadas.length > 0) {
+        msg += `\n\nSe eliminaron ${eliminadas.length} prueba(s) registrada(s) cuyo bloque ya no existe:`;
+        eliminadas.forEach(e => {
+          const fechaStr = new Date(e.fecha).toLocaleDateString();
+          msg += `\n  • ${e.codigo}-${e.seccion} ${e.tipo_prueba} (${e.hora_inicio}-${e.hora_fin}) del ${fechaStr}`;
+        });
+      }
+      
+      console.log('Calendario actualizado:', respuesta);
+      alert(msg);
+    } catch (err) {
+      setError(err.message);
+      console.error('Error al actualizar calendario:', err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setCargandoDatos(false);
+    }
+  };
+
   if (loading) {
     return <div className="loading">Cargando dashboard...</div>;
   }
@@ -273,6 +317,13 @@ export function DashboardDetailPage() {
               disabled={cargandoDatos}
             >
               {cargandoDatos ? 'Procesando...' : 'Enviar Datos'}
+            </button>
+            <button 
+              className="update-calendar-btn" 
+              onClick={handleActualizarCalendario}
+              disabled={cargandoDatos}
+            >
+              {cargandoDatos ? 'Procesando...' : 'Actualizar Calendario'}
             </button>
           </>
         )}
@@ -368,26 +419,36 @@ export function DashboardDetailPage() {
             />
           </main>
         ) : (
-          <div className="calendario-layout">
-            <main className="calendario-main">
-              <CalendarView
-                fechaInicio={dashboard?.fecha_inicio}
-                fechaFin={dashboard?.fecha_fin}
-                horasRegistradas={horasRegistradas}
-                horariosProgramables={horariosProgramables}
-                pruebasRegistradas={pruebasRegistradas}
-                pruebasProgramables={pruebasProgramables}
-                dashboardId={dashboardId}
-                onPruebasChanged={cargarPruebasRegistradas}
-              />
-            </main>
-            <aside className="calendario-sidebar">
-              <PruebasSidebar 
-                pruebas={pruebasProgramables}
-                dashboardId={dashboardId}
-              />
-            </aside>
-          </div>
+          <main className="dashboard-detail-main">
+            <CalendarView
+              fechaInicio={dashboard?.fecha_inicio}
+              fechaFin={dashboard?.fecha_fin}
+              horasRegistradas={horasRegistradas}
+              horariosProgramables={horariosProgramables}
+              pruebasRegistradas={pruebasRegistradas}
+              pruebasProgramables={pruebasProgramables}
+              dashboardId={dashboardId}
+              onPruebasChanged={cargarPruebasRegistradas}
+              filtroEspecialidad={filtroEspecialidad}
+              filtroSemestre={filtroSemestre}
+              onFiltroEspecialidadChange={setFiltroEspecialidad}
+              onFiltroSemestreChange={setFiltroSemestre}
+              filtrarPrueba={filtrarHorario}
+              feriados={feriados}
+              onToggleFeriado={async (fecha) => {
+                try {
+                  const updated = await dashboardService.toggleFeriado(dashboardId, fecha);
+                  let feriadosList = updated.feriados || [];
+                  if (typeof feriadosList === 'string') {
+                    try { feriadosList = JSON.parse(feriadosList); } catch (e) { feriadosList = []; }
+                  }
+                  setFeriados(feriadosList);
+                } catch (err) {
+                  console.error('Error toggling feriado:', err);
+                }
+              }}
+            />
+          </main>
         )}
       </div>
     </div>
