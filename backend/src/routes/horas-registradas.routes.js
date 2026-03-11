@@ -48,6 +48,48 @@ router.get('/diccionario/:dashboardId', async (req, res) => {
 });
 
 /**
+ * GET /api/horas-registradas/debug-conflictos/:dashboardId
+ * Diagnóstico: muestra datos de profesores y conflictos detectados
+ */
+router.get('/debug-conflictos/:dashboardId', async (req, res) => {
+  try {
+    const { dashboardId } = req.params;
+    
+    // Re-evaluar conflictos primero
+    const resultado = await reevaluarConflictosDashboard(dashboardId);
+    
+    // Obtener estado actual
+    const { pool: dbPool } = await import('../db/pool.js');
+    const { rows } = await dbPool.query(
+      `SELECT 
+        hr.id, hr.dia_semana, hr.hora_inicio, hr.horario, hr.conflictos,
+        hp.codigo, hp.seccion, hp.tipo_hora, hp.profesor_1_id, hp.profesor_2_id
+       FROM horas_registradas hr
+       JOIN horas_programables hp ON hr.hora_programable_id = hp.id
+       WHERE hr.dashboard_id = $1
+       ORDER BY hr.dia_semana, hr.hora_inicio`,
+      [dashboardId]
+    );
+    
+    res.json({ 
+      resultado,
+      horas: rows.map(r => ({
+        id: r.id,
+        dia: r.dia_semana,
+        hora: String(r.hora_inicio),
+        horario: r.horario,
+        curso: `${r.codigo} Sec${r.seccion} ${r.tipo_hora}`,
+        prof1: r.profesor_1_id,
+        prof2: r.profesor_2_id,
+        conflictos: r.conflictos
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/horas-registradas/:dashboardId
  * Obtener todas las horas registradas de un dashboard
  */

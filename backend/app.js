@@ -11,7 +11,10 @@ import pruebasRegistradasRoutes from "./src/routes/pruebas-registradas.routes.js
 const app = express();
 
 // Middlewares
-app.use(cors());
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',')
+  : ['http://localhost:5173'];
+app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use(express.json());
 
 // Health check

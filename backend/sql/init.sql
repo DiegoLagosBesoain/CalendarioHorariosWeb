@@ -225,3 +225,25 @@ BEGIN
     ALTER TABLE pruebas_programables ADD COLUMN cantidad_evaluaciones INTEGER;
   END IF;
 END $$;
+
+-- Agregar columna sala_especial a horas_programables si no existe
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'horas_programables' AND column_name = 'sala_especial'
+  ) THEN
+    ALTER TABLE horas_programables ADD COLUMN sala_especial VARCHAR(255);
+  END IF;
+END $$;
+
+-- Agregar columna sala_especial a pruebas_programables si no existe
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'pruebas_programables' AND column_name = 'sala_especial'
+  ) THEN
+    ALTER TABLE pruebas_programables ADD COLUMN sala_especial VARCHAR(255);
+  END IF;
+END $$;

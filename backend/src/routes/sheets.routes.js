@@ -8,6 +8,8 @@ import {
   limpiarPruebasProgramables,
   actualizarCalendarioPruebas,
 } from "../services/maestros.service.js";
+import { reevaluarConflictosDashboard, reevaluarConflictosPruebasDashboard } from "../services/conflict-detector.service.js";
+import { pool } from "../db/pool.js";
 
 const router = express.Router();
 
@@ -50,8 +52,9 @@ router.get("/master.list", async (req, res) => {
 router.post("/load-maestros", async (req, res) => {
   try {
     // Obtener datos de maestro.listar
+    console.log("Llamando a maestro.listar en AppScript...");
     const resultString = await callAppScript("maestro.listar");
-
+    console.log("Respuesta de maestro.listar recibida.",resultString);
     // Parsear el JSON string
     let maestrosData;
     try {
@@ -74,6 +77,14 @@ router.post("/load-maestros", async (req, res) => {
 
     // Procesar y crear horarios
     const horariosCreados = await procesarMaestrosYCrearHorarios(maestrosData);
+
+    // Re-evaluar conflictos de todos los dashboards
+    const dashboardsResult = await pool.query(`SELECT id FROM dashboards`);
+    for (const dash of dashboardsResult.rows) {
+      await reevaluarConflictosDashboard(dash.id);
+      await reevaluarConflictosPruebasDashboard(dash.id);
+    }
+    console.log(`[load-maestros] Re-evaluados conflictos de ${dashboardsResult.rows.length} dashboards`);
 
     res.json({
       ok: true,
@@ -198,6 +209,60 @@ router.post("/actualizar-calendario/:dashboardId", async (req, res) => {
       ok: false,
       error: err.message,
     });
+  }
+});
+
+/**
+ * GET /api/sheets/debug-profesores
+ * Diagnóstico: verificar profesores y su asignación a horas_programables
+ */
+router.get("/debug-profesores", async (req, res) => {
+  try {
+    const { pool } = await import("../db/pool.js");
+    
+    // Contar profesores
+    const profResult = await pool.query(
+      `SELECT id, rut, nombre FROM profesores ORDER BY id`
+    );
+    
+    // Horas programables con sus profesores
+    const hpResult = await pool.query(
+      `SELECT hp.id, hp.codigo, hp.seccion, hp.tipo_hora, hp.titulo,
+              hp.profesor_1_id, hp.profesor_2_id,
+              p1.nombre as prof1_nombre, p1.rut as prof1_rut,
+              p2.nombre as prof2_nombre, p2.rut as prof2_rut
+       FROM horas_programables hp
+       LEFT JOIN profesores p1 ON hp.profesor_1_id = p1.id
+       LEFT JOIN profesores p2 ON hp.profesor_2_id = p2.id
+       ORDER BY hp.codigo, hp.seccion, hp.tipo_hora`
+    );
+    
+    // Resumen
+    const sinProfesor = hpResult.rows.filter(r => !r.profesor_1_id && !r.profesor_2_id);
+    const conProfesor = hpResult.rows.filter(r => r.profesor_1_id || r.profesor_2_id);
+    
+    res.json({
+      ok: true,
+      profesores: {
+        total: profResult.rows.length,
+        lista: profResult.rows
+      },
+      horasProgramables: {
+        total: hpResult.rows.length,
+        conProfesor: conProfesor.length,
+        sinProfesor: sinProfesor.length,
+        sinProfesorDetalle: sinProfesor.map(r => `${r.codigo} Sec${r.seccion} ${r.tipo_hora}`),
+        detalle: hpResult.rows.map(r => ({
+          id: r.id,
+          curso: `${r.codigo} Sec${r.seccion} ${r.tipo_hora}`,
+          titulo: r.titulo,
+          prof1: r.profesor_1_id ? `${r.prof1_nombre} (id=${r.profesor_1_id}, rut=${r.prof1_rut})` : null,
+          prof2: r.profesor_2_id ? `${r.prof2_nombre} (id=${r.profesor_2_id}, rut=${r.prof2_rut})` : null
+        }))
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

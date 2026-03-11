@@ -60,7 +60,8 @@ async function reevaluarConflictosDashboard(dashboardId) {
         hp.especialidades_semestres,
         hp.disponibilidad,
         hp.profesor_1_id,
-        hp.profesor_2_id
+        hp.profesor_2_id,
+        hp.sala_especial
        FROM horas_registradas hr
        JOIN horas_programables hp ON hr.hora_programable_id = hp.id
        WHERE hr.dashboard_id = $1
@@ -69,7 +70,52 @@ async function reevaluarConflictosDashboard(dashboardId) {
     );
 
     const horas = result.rows;
-    const conflictosPorHora = {}; // hora_reg_id -> [ids de horas en conflicto]
+    const conflictosPorHora = {}; // hora_reg_id -> [{id, tipo}]
+
+    // Helper para agregar conflicto bidireccional con tipo
+    const agregarConflicto = (id1, id2, tipo) => {
+      if (!conflictosPorHora[id1]) conflictosPorHora[id1] = [];
+      if (!conflictosPorHora[id2]) conflictosPorHora[id2] = [];
+      if (!conflictosPorHora[id1].some(c => c.id === id2 && c.tipo === tipo)) {
+        conflictosPorHora[id1].push({ id: id2, tipo });
+      }
+      if (!conflictosPorHora[id2].some(c => c.id === id1 && c.tipo === tipo)) {
+        conflictosPorHora[id2].push({ id: id1, tipo });
+      }
+    };
+
+    // Helper para agregar conflicto especial (sin otra hora, solo tipo)
+    const agregarConflictoEspecial = (id, tipo) => {
+      if (!conflictosPorHora[id]) conflictosPorHora[id] = [];
+      if (!conflictosPorHora[id].some(c => c.tipo === tipo)) {
+        conflictosPorHora[id].push({ id: null, tipo });
+      }
+    };
+
+    // Normalizar hora_inicio para comparación: TIME de PG viene como "09:30:00" o "9:30:00"
+    const normHoraInicio = (h) => {
+      if (!h) return '';
+      const str = String(h).substring(0, 5); // "09:30:00" -> "09:30"
+      const [hh, mm] = str.split(':');
+      return `${parseInt(hh)}:${mm}`; // "09:30" -> "9:30"
+    };
+
+    // Pre-procesar: extraer IDs de profesores como Set de números por cada hora
+    const profesoresPorHora = horas.map(h => {
+      const ids = new Set();
+      if (h.profesor_1_id != null) ids.add(Number(h.profesor_1_id));
+      if (h.profesor_2_id != null) ids.add(Number(h.profesor_2_id));
+      return ids;
+    });
+
+    // Debug: mostrar info
+    console.log(`[ConflictDetector] Dashboard ${dashboardId}: ${horas.length} horas totales`);
+    horas.forEach((h, idx) => {
+      const profs = [...profesoresPorHora[idx]];
+      if (profs.length > 0) {
+        console.log(`  [${idx}] hr_id=${h.hora_reg_id} ${h.codigo} Sec${h.seccion} ${h.tipo_hora} | dia=${h.dia_semana} hora=${normHoraInicio(h.hora_inicio)} horario=${h.horario} | profIds=[${profs.join(',')}]`);
+      }
+    });
 
     // 3. Detectar conflictos de toque de semestre
     for (let i = 0; i < horas.length; i++) {
@@ -77,76 +123,103 @@ async function reevaluarConflictosDashboard(dashboardId) {
         const hora1 = horas[i];
         const hora2 = horas[j];
 
-        // Solo comparar si están en el mismo bloque horario
+        // Solo comparar si están en el mismo bloque horario Y mismo horario
         if (hora1.dia_semana === hora2.dia_semana && 
-            hora1.hora_inicio === hora2.hora_inicio &&
+            normHoraInicio(hora1.hora_inicio) === normHoraInicio(hora2.hora_inicio) &&
             hora1.horario === hora2.horario) {
           
-          // Skip si son del mismo curso (diferente sección)
+          // Skip si son del mismo curso
           if (hora1.codigo === hora2.codigo) {
             continue;
           }
 
-          // Extraer semestres de ambas horas
           const semestres1 = extraerSemestres(hora1.especialidades_semestres);
           const semestres2 = extraerSemestres(hora2.especialidades_semestres);
-
-          // Encontrar semestres comunes
           const semestresComunes = semestres1.filter(s => semestres2.includes(s));
 
           if (semestresComunes.length > 0) {
-            // Hay conflicto de toque de semestre
-            if (!conflictosPorHora[hora1.hora_reg_id]) {
-              conflictosPorHora[hora1.hora_reg_id] = [];
-            }
-            if (!conflictosPorHora[hora2.hora_reg_id]) {
-              conflictosPorHora[hora2.hora_reg_id] = [];
-            }
-            
-            conflictosPorHora[hora1.hora_reg_id].push(hora2.hora_reg_id);
-            conflictosPorHora[hora2.hora_reg_id].push(hora1.hora_reg_id);
+            agregarConflicto(hora1.hora_reg_id, hora2.hora_reg_id, 'semestre');
           }
         }
       }
     }
 
     // 4. Detectar conflictos de doble asignación de profesor
-    for (let i = 0; i < horas.length; i++) {
-      for (let j = i + 1; j < horas.length; j++) {
-        const hora1 = horas[i];
-        const hora2 = horas[j];
+    // Agrupar horas por bloque (dia + hora normalizada) para comparar eficientemente
+    const bloqueMap = {}; // "Lunes|9:30" -> [índices en array horas]
+    horas.forEach((h, idx) => {
+      const clave = `${h.dia_semana}|${normHoraInicio(h.hora_inicio)}`;
+      if (!bloqueMap[clave]) bloqueMap[clave] = [];
+      bloqueMap[clave].push(idx);
+    });
 
-        // Solo comparar si están en el mismo bloque horario
-        if (hora1.dia_semana === hora2.dia_semana && 
-            hora1.hora_inicio === hora2.hora_inicio) {
-          
-          // Verificar si comparten algún profesor
-          const prof1Ids = [hora1.profesor_1_id, hora1.profesor_2_id].filter(Boolean);
-          const prof2Ids = [hora2.profesor_1_id, hora2.profesor_2_id].filter(Boolean);
-          
-          const profesorComun = prof1Ids.find(p => prof2Ids.includes(p));
+    console.log(`[ConflictDetector] Bloques ocupados: ${Object.keys(bloqueMap).length}`);
+    for (const [clave, indices] of Object.entries(bloqueMap)) {
+      if (indices.length < 2) continue; // Sin posibilidad de conflicto
 
-          if (profesorComun) {
-            // Hay conflicto de doble asignación
-            if (!conflictosPorHora[hora1.hora_reg_id]) {
-              conflictosPorHora[hora1.hora_reg_id] = [];
+      console.log(`  Bloque [${clave}]: ${indices.length} horas`);
+      
+      // Comparar todas las combinaciones dentro del mismo bloque
+      for (let i = 0; i < indices.length; i++) {
+        for (let j = i + 1; j < indices.length; j++) {
+          const idx1 = indices[i];
+          const idx2 = indices[j];
+          const hora1 = horas[idx1];
+          const hora2 = horas[idx2];
+          const profs1 = profesoresPorHora[idx1];
+          const profs2 = profesoresPorHora[idx2];
+
+          // Si alguna no tiene profesores, no hay conflicto posible
+          if (profs1.size === 0 || profs2.size === 0) continue;
+
+          // Buscar intersección de profesores
+          let profesorComun = null;
+          for (const profId of profs1) {
+            if (profs2.has(profId)) {
+              profesorComun = profId;
+              break;
             }
-            if (!conflictosPorHora[hora2.hora_reg_id]) {
-              conflictosPorHora[hora2.hora_reg_id] = [];
-            }
-            
-            if (!conflictosPorHora[hora1.hora_reg_id].includes(hora2.hora_reg_id)) {
-              conflictosPorHora[hora1.hora_reg_id].push(hora2.hora_reg_id);
-            }
-            if (!conflictosPorHora[hora2.hora_reg_id].includes(hora1.hora_reg_id)) {
-              conflictosPorHora[hora2.hora_reg_id].push(hora1.hora_reg_id);
-            }
+          }
+
+          if (profesorComun !== null) {
+            console.log(`    ⚠️ PROFESOR COMPARTIDO (id=${profesorComun}): ${hora1.codigo} Sec${hora1.seccion} ${hora1.tipo_hora} [${hora1.horario}] vs ${hora2.codigo} Sec${hora2.seccion} ${hora2.tipo_hora} [${hora2.horario}]`);
+            agregarConflicto(hora1.hora_reg_id, hora2.hora_reg_id, 'profesor');
           }
         }
       }
     }
 
-    // 5. Actualizar el campo conflictos en la BD
+    // 5. Detectar conflictos de sala especial
+    // Dos horas en el mismo bloque NO pueden compartir la misma sala_especial,
+    // incluso si son del mismo código pero diferente sección
+    for (const [clave, indices] of Object.entries(bloqueMap)) {
+      if (indices.length < 2) continue;
+
+      for (let i = 0; i < indices.length; i++) {
+        for (let j = i + 1; j < indices.length; j++) {
+          const idx1 = indices[i];
+          const idx2 = indices[j];
+          const hora1 = horas[idx1];
+          const hora2 = horas[idx2];
+
+          // Ambas deben tener sala_especial asignada y ser la misma
+          if (hora1.sala_especial && hora2.sala_especial &&
+              hora1.sala_especial === hora2.sala_especial) {
+            console.log(`    ⚠️ SALA ESPECIAL COMPARTIDA ("${hora1.sala_especial}"): ${hora1.codigo} Sec${hora1.seccion} ${hora1.tipo_hora} vs ${hora2.codigo} Sec${hora2.seccion} ${hora2.tipo_hora}`);
+            agregarConflicto(hora1.hora_reg_id, hora2.hora_reg_id, 'sala_especial');
+          }
+        }
+      }
+    }
+
+    // 6. Detectar conflictos de disponibilidad de profesor
+    for (const hora of horas) {
+      if (tieneConflictoDisponibilidad(hora)) {
+        agregarConflictoEspecial(hora.hora_reg_id, 'disponibilidad');
+      }
+    }
+
+    // 7. Actualizar el campo conflictos en la BD
     for (const [horaRegId, conflictIds] of Object.entries(conflictosPorHora)) {
       // Remover duplicados
       const uniqueConflicts = [...new Set(conflictIds)];
@@ -424,8 +497,11 @@ async function reevaluarConflictosPruebasDashboard(dashboardId) {
     }
 
     // 5b. Detectar conflictos de día no coincidente
-    // Para pruebas tipo CLASE, AYUDANTIA, LAB/TALLER: verificar si la fecha cae en un día
-    // que coincide con los días del horario (bloques_horario)
+    // Para pruebas tipo CLASE, AYUDANTIA, LAB/TALLER: verificar que la fecha
+    // coincida con el día del bloque seleccionado (hora_inicio/hora_fin).
+    // Si la prueba tiene hora_inicio/hora_fin, buscar el bloque específico en
+    // bloques_horario que coincida y verificar su día.
+    // Si no tiene hora, verificar que el día esté en algún bloque.
     const diasSemanaMap = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     for (const prueba of pruebas) {
       const tipoPrueba = (prueba.tipo_prueba || '').toUpperCase();
@@ -439,15 +515,38 @@ async function reevaluarConflictosPruebasDashboard(dashboardId) {
       }
       if (!Array.isArray(bloques) || bloques.length === 0) continue;
 
-      // Obtener los días del horario desde los bloques
-      const diasHorario = [...new Set(bloques.map(b => b.dia).filter(Boolean))];
-      if (diasHorario.length === 0) continue;
-
       // Obtener día de la fecha de la prueba
       const diaFecha = diasSemanaMap[prueba.fecha.getDay()];
 
-      // Verificar si el día coincide
-      if (!diasHorario.includes(diaFecha)) {
+      let diaCoincide = false;
+
+      // Si la prueba tiene hora_inicio y hora_fin, buscar el bloque específico
+      const horaInicioPrueba = prueba.hora_inicio ? normalizarHora(String(prueba.hora_inicio).substring(0, 5)) : null;
+      const horaFinPrueba = prueba.hora_fin ? normalizarHora(String(prueba.hora_fin).substring(0, 5)) : null;
+
+      if (horaInicioPrueba && horaFinPrueba) {
+        // Buscar el bloque que coincida con hora_inicio y hora_fin
+        const bloqueSeleccionado = bloques.find(b => {
+          const bInicio = b.inicio ? normalizarHora(b.inicio) : null;
+          const bFin = b.fin ? normalizarHora(b.fin) : null;
+          return bInicio === horaInicioPrueba && bFin === horaFinPrueba;
+        });
+
+        if (bloqueSeleccionado && bloqueSeleccionado.dia) {
+          // Verificar que el día del bloque seleccionado coincida con el día de la fecha
+          diaCoincide = bloqueSeleccionado.dia === diaFecha;
+        } else {
+          // Si no encontramos el bloque exacto, verificar contra todos los días
+          const diasHorario = [...new Set(bloques.map(b => b.dia).filter(Boolean))];
+          diaCoincide = diasHorario.length === 0 || diasHorario.includes(diaFecha);
+        }
+      } else {
+        // Sin hora seleccionada: verificar que el día esté en algún bloque
+        const diasHorario = [...new Set(bloques.map(b => b.dia).filter(Boolean))];
+        diaCoincide = diasHorario.length === 0 || diasHorario.includes(diaFecha);
+      }
+
+      if (!diaCoincide) {
         if (!conflictosPorPrueba[prueba.prueba_reg_id]) {
           conflictosPorPrueba[prueba.prueba_reg_id] = [];
         }

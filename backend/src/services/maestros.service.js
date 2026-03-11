@@ -10,6 +10,7 @@ async function obtenerOCrearProfesor(rut, nombre) {
   // Convertir a string por si viene como número (RUT sin puntos ni guión)
   const rutStr = rut != null ? String(rut).trim() : '';
   if (!rutStr) {
+    console.log(`[PROF] Saltando profesor: rut es vacío/null (raw value: ${JSON.stringify(rut)})`);
     return null;
   }
 
@@ -21,14 +22,16 @@ async function obtenerOCrearProfesor(rut, nombre) {
     );
 
     if (resultado.rows.length > 0) {
+      console.log(`[PROF] Encontrado existente: rut=${rutStr} -> id=${resultado.rows[0].id}`);
       return resultado.rows[0];
     }
 
     // Si no existe, crear nuevo
-    const nombreStr = nombre != null ? String(nombre).trim() : '';
+    let nombreStr = nombre != null ? String(nombre).trim() : '';
     if (!nombreStr) {
-      console.warn(`Profesor con RUT ${rutStr} no tiene nombre, saltando...`);
-      return null;
+      // Si tiene RUT pero no nombre, usar el RUT como nombre provisional
+      console.warn(`[PROF] Profesor con RUT "${rutStr}" no tiene nombre (raw: ${JSON.stringify(nombre)}), usando RUT como nombre provisional`);
+      nombreStr = `Profesor ${rutStr}`;
     }
 
     const nuevoProfesor = await pool.query(
@@ -38,10 +41,10 @@ async function obtenerOCrearProfesor(rut, nombre) {
       [rutStr, nombreStr, JSON.stringify({})]
     );
 
-    console.log(`Creado nuevo profesor: ${rutStr} - ${nombreStr}`);
+    console.log(`[PROF] Creado nuevo profesor: rut=${rutStr} nombre=${nombreStr} -> id=${nuevoProfesor.rows[0].id}`);
     return nuevoProfesor.rows[0];
   } catch (error) {
-    console.error(`Error obtener/crear profesor ${rut}:`, error);
+    console.error(`[PROF] ERROR creando/buscando profesor rut="${rutStr}" nombre="${nombre}":`, error.message);
     return null;
   }
 }
@@ -150,12 +153,19 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
       `Procesando ${cursosMandantes.length} cursos mandantes de ${maestrosData.length} totales`
     );
 
+    // Limpiar sala_especial de todas las horas_programables antes de reprocesar
+    // para que siempre se re-apliquen las restricciones desde cero
+    await pool.query(`UPDATE horas_programables SET sala_especial = NULL`);
+    console.log('[SALA_ESP] Limpiadas todas las sala_especial antes de reprocesar');
+
     for (const curso of cursosMandantes) {
-      // Log de las columnas del primer curso para depuración
+      // Log de las columnas del primer curso para depuración COMPLETA
       if (cursosMandantes.indexOf(curso) === 0) {
-        console.log('[DEBUG] Columnas del spreadsheet:', Object.keys(curso));
-        const evalKeys = Object.keys(curso).filter(k => k.toLowerCase().includes('eval') || k.toLowerCase().includes('examen') || k.toLowerCase().includes('cantidad'));
-        console.log('[DEBUG] Columnas relevantes (eval/examen/cantidad):', evalKeys.map(k => `"${k}" = ${JSON.stringify(curso[k])}`));
+        console.log('[DEBUG] ====== PRIMER CURSO - DATOS COMPLETOS ======');
+        Object.entries(curso).forEach(([key, value]) => {
+          console.log(`  "${key}" => ${JSON.stringify(value)} (type: ${typeof value})`);
+        });
+        console.log('[DEBUG] ============================================');
       }
 
       // Extraer información base del curso
@@ -171,25 +181,125 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
       // Extraer especialidades
       const especialidades = extraerEspecialidades(curso);
 
-      // Obtener o crear profesores
-      const profesor1RUT = curso["RUT PROFESOR 1"];
-      const profesor1Nombre = curso["NOMBRE PROFESOR 1 \n(PROFESOR PRINCIPAL SESIÓN 01)"];
-      const profesor2RUT = curso["RUT PROFESOR 2"];
-      const profesor2Nombre = curso["NOMBRE PROFESOR 2\n(2DO PROFESOR - SESIÓN 02)"];
-      const profesorLabRUT = curso["RUT PROFESOR LABT"];
-      const profesorLabNombre = curso["PROFESOR LABT "];
+      // Helper: buscar columna por coincidencia parcial (ignora \n, espacios extra)
+      const buscarColumna = (curso, ...patrones) => {
+        for (const patron of patrones) {
+          // Primero intentar match exacto
+          if (curso[patron] !== undefined) return curso[patron];
+        }
+        // Si no, buscar por coincidencia parcial normalizada
+        const keys = Object.keys(curso);
+        for (const patron of patrones) {
+          const patronNorm = patron.replace(/[\n\r\s]+/g, ' ').toLowerCase().trim();
+          const found = keys.find(k => {
+            const kNorm = k.replace(/[\n\r\s]+/g, ' ').toLowerCase().trim();
+            return kNorm === patronNorm || kNorm.includes(patronNorm) || patronNorm.includes(kNorm);
+          });
+          if (found && curso[found] !== undefined) return curso[found];
+        }
+        return undefined;
+      };
+
+      // Helper: obtener primer valor no-vacío de múltiples columnas
+      const primerValorNoVacio = (...valores) => {
+        for (const v of valores) {
+          if (v != null && String(v).trim() !== '') return v;
+        }
+        return undefined;
+      };
+
+      // Obtener o crear profesores (búsqueda flexible de columnas)
+      const profesor1RUT = buscarColumna(curso, "RUT PROFESOR 1");
+      // El nombre puede estar en la columna BANNER o en la columna normal
+      const profesor1Nombre = primerValorNoVacio(
+        buscarColumna(curso, 
+          "NOMBRE PROFESOR BANNER 1 \n(PROFESOR PRINCIPAL SESIÓN 01)",
+          "NOMBRE PROFESOR BANNER 1"
+        ),
+        buscarColumna(curso, 
+          "NOMBRE PROFESOR 1 \n(PROFESOR PRINCIPAL SESIÓN 01)",
+          "NOMBRE PROFESOR 1",
+          "NOMBRE PROFESOR 1 (PROFESOR PRINCIPAL SESIÓN 01)"
+        )
+      );
+      const profesor2RUT = buscarColumna(curso, "RUT PROFESOR 2");
+      const profesor2Nombre = primerValorNoVacio(
+        buscarColumna(curso,
+          "NOMBRE PROFESOR BANNER 2\n(2DO PROFESOR - SESIÓN 02)",
+          "NOMBRE PROFESOR BANNER 2"
+        ),
+        buscarColumna(curso,
+          "NOMBRE PROFESOR 2\n(2DO PROFESOR - SESIÓN 02)",
+          "NOMBRE PROFESOR 2",
+          "NOMBRE PROFESOR 2 (2DO PROFESOR - SESIÓN 02)"
+        )
+      );
+      const profesorLabRUT = buscarColumna(curso, "RUT PROFESOR LABT", "RUT PROFESOR LAB");
+      const profesorLabNombre = buscarColumna(curso, "PROFESOR LABT ", "PROFESOR LABT", "PROFESOR LAB");
+
+      // Debug: mostrar columnas de profesores del primer curso para verificar match
+      if (cursosMandantes.indexOf(curso) === 0) {
+        const profKeys = Object.keys(curso).filter(k => 
+          k.toLowerCase().includes('profesor') || k.toLowerCase().includes('prof') || k.toLowerCase().includes('rut')
+        );
+        console.log('[DEBUG] Columnas de profesores encontradas:', profKeys.map(k => `"${k}" = ${JSON.stringify(curso[k])}`));
+        console.log(`[DEBUG] prof1RUT="${profesor1RUT}" prof1Nombre="${profesor1Nombre}"`);
+        console.log(`[DEBUG] prof2RUT="${profesor2RUT}" prof2Nombre="${profesor2Nombre}"`);
+        console.log(`[DEBUG] profLabRUT="${profesorLabRUT}" profLabNombre="${profesorLabNombre}"`);
+      }
 
       const prof1 = await obtenerOCrearProfesor(profesor1RUT, profesor1Nombre);
       const prof2 = await obtenerOCrearProfesor(profesor2RUT, profesor2Nombre);
       const profLab = await obtenerOCrearProfesor(profesorLabRUT, profesorLabNombre);
 
+      // Debug: mostrar IDs de profesores asignados
+      if (cursosMandantes.indexOf(curso) < 3) {
+        console.log(`[DEBUG] ${codigo} Sec${seccion}: prof1=${prof1?.id || 'NULL'} prof2=${prof2?.id || 'NULL'} profLab=${profLab?.id || 'NULL'}`);
+      }
+
       // Extraer disponibilidad horaria del profesor desde columnas de días
       const disponibilidad = extraerDisponibilidad(curso);
 
+      // Extraer sala especial y su uso por tipo de hora
+      const salaEspecialNombre = buscarColumna(curso, "Sala especial");
+      const salaEspecialUso = buscarColumna(curso, "USO");
+
+      // Mapeo de abreviaciones de USO a tipo_hora
+      const USO_A_TIPO_HORA = {
+        'CLAS': 'CLASE',
+        'AYUD': 'AYUDANTIA',
+        'LAB/TALLER': 'LAB/TALLER'
+      };
+
+      // Parsear tipos de uso de la sala especial
+      let tiposConSalaEspecial = new Set();
+      if (salaEspecialNombre && typeof salaEspecialNombre === 'string' && salaEspecialNombre.trim() !== '') {
+        // Crear la sala en la tabla salas si no existe
+        await pool.query(
+          `INSERT INTO salas (nombre, es_especial) VALUES ($1, TRUE)
+           ON CONFLICT (nombre) DO UPDATE SET es_especial = TRUE`,
+          [salaEspecialNombre.trim()]
+        );
+
+        if (salaEspecialUso && typeof salaEspecialUso === 'string' && salaEspecialUso.trim() !== '') {
+          const usos = salaEspecialUso.split(',').map(u => u.trim());
+          for (const uso of usos) {
+            const tipoHora = USO_A_TIPO_HORA[uso];
+            if (tipoHora) {
+              tiposConSalaEspecial.add(tipoHora);
+            }
+          }
+        }
+        console.log(`[SALA_ESP] ${codigo} Sec${seccion}: sala="${salaEspecialNombre}" tipos=[${[...tiposConSalaEspecial].join(',')}]`);
+      }
+
       // Extraer control de exámenes y cantidad de evaluaciones
       const examenRaw = curso["EXAMEN (Sí o No)"] || curso["EXAMEN"] || curso["Examen"] || curso["examen"] || "";
+      const examenNorm = typeof examenRaw === 'string'
+        ? examenRaw.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()
+        : "";
       const tieneExamen = typeof examenRaw === 'string' 
-        ? examenRaw.trim().toUpperCase().startsWith("SI") || examenRaw.trim().toUpperCase().startsWith("SÍ")
+        ? examenNorm.startsWith("SI")
         : !!examenRaw;
       
       const cantEvalRaw = curso["CANTIDAD EVALUACIONES (semestrales)"] || curso["CANTIDAD EVALUACIONES"] || curso["Cantidad Evaluaciones"] || curso["cantidad evaluaciones"] || null;
@@ -206,7 +316,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           prof1?.id || null,
           prof2?.id || null,
           titulo,
-          disponibilidad
+          disponibilidad,
+          tiposConSalaEspecial.has('CLASE') ? salaEspecialNombre.trim() : null
         );
         horariosCreados.push(horarioClase);
       }
@@ -225,27 +336,31 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           prof1?.id || null,
           prof2?.id || null,
           titulo,
-          disponibilidad
+          disponibilidad,
+          tiposConSalaEspecial.has('AYUDANTIA') ? salaEspecialNombre.trim() : null
         );
         horariosCreados.push(horarioAyudantia);
       }
 
       // Crear entrada para LABORATORIOS/TALLERES si existe
-      // Para LAB: solo usa prof1 (profesor lab), prof2 es null
+      // Si la fila NO tiene clases, asignar prof1 al lab; si tiene clases, usar profLab
+      const tieneClases = curso["Clases A PROGRAMAR"] && curso["Clases A PROGRAMAR"] > 0;
       if (
         curso["Laboratorios o Talleres PROGRAMAR"] &&
         curso["Laboratorios o Talleres PROGRAMAR"] > 0
       ) {
+        const labProf1 = tieneClases ? (profLab?.id || null) : (prof1?.id || null);
         const horarioLab = await crearHorarioProgramable(
           codigo,
           seccion,
           "LAB/TALLER",
           curso["Laboratorios o Talleres PROGRAMAR"],
           especialidades,
-          profLab?.id || null,
+          labProf1,
           null,
           titulo,
-          disponibilidad
+          disponibilidad,
+          tiposConSalaEspecial.has('LAB/TALLER') ? salaEspecialNombre.trim() : null
         );
         horariosCreados.push(horarioLab);
       }
@@ -274,7 +389,7 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
         { inicio: "19:30", fin: "21:20" }
       ];
 
-      // Solo crear EXAMEN si el curso tiene examen
+      // EXAMEN: solo depende de tieneExamen, independiente de cantidadEvaluaciones
       if (tieneExamen) {
         await crearPruebaProgramable(
           codigo,
@@ -290,18 +405,21 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
         );
       }
 
-      await crearPruebaProgramable(
-        codigo,
-        seccion,
-        "TARDE",
-        especialidades,
-        prof1?.id || null,
-        prof2?.id || null,
-        titulo,
-        BLOQUES_TARDE,
-        tieneExamen,
-        cantidadEvaluaciones
-      );
+      // TARDE: depende de cantidadEvaluaciones >= 1
+      if (cantidadEvaluaciones && cantidadEvaluaciones >= 1) {
+        await crearPruebaProgramable(
+          codigo,
+          seccion,
+          "TARDE",
+          especialidades,
+          prof1?.id || null,
+          prof2?.id || null,
+          titulo,
+          BLOQUES_TARDE,
+          tieneExamen,
+          cantidadEvaluaciones
+        );
+      }
     }
 
     return horariosCreados;
@@ -322,6 +440,7 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
  * @param {number} profesor2Id - ID del profesor 2
  * @param {string} titulo - Título del curso
  * @param {Object} disponibilidad - Diccionario de disponibilidad horaria por día
+ * @param {string|null} salaEspecial - Nombre de la sala especial asignada
  * @returns {Promise<Object>} - Registro creado
  */
 async function crearHorarioProgramable(
@@ -333,9 +452,12 @@ async function crearHorarioProgramable(
   profesor1Id,
   profesor2Id,
   titulo,
-  disponibilidad = {}
+  disponibilidad = {},
+  salaEspecial = null
 ) {
   try {
+    console.log(`[HP] Creando/actualizando ${codigo}-${seccion}-${tipoHora}: prof1_id=${profesor1Id} prof2_id=${profesor2Id}`);
+    
     // Verificar si ya existe (por combinación de codigo, seccion, tipo_hora)
     const existente = await pool.query(
       `SELECT id FROM horas_programables 
@@ -344,15 +466,12 @@ async function crearHorarioProgramable(
     );
 
     if (existente.rows.length > 0) {
-      console.log(
-        `Horario ${codigo}-${seccion}-${tipoHora} ya existe, actualizando...`
-      );
       // Actualizar si ya existe
       const result = await pool.query(
         `UPDATE horas_programables 
          SET cantidad_horas = $1, profesor_1_id = $2, profesor_2_id = $3, 
-             especialidades_semestres = $4, titulo = $5, disponibilidad = $6, updated_at = NOW()
-         WHERE id = $7
+             especialidades_semestres = $4, titulo = $5, disponibilidad = $6, sala_especial = $7, updated_at = NOW()
+         WHERE id = $8
          RETURNING *`,
         [
           cantidadHoras,
@@ -361,17 +480,19 @@ async function crearHorarioProgramable(
           JSON.stringify(especialidades),
           titulo,
           JSON.stringify(disponibilidad),
+          salaEspecial,
           existente.rows[0].id,
         ]
       );
+      console.log(`[HP] Actualizado ${codigo}-${seccion}-${tipoHora} (id=${existente.rows[0].id}): prof1_id=${result.rows[0].profesor_1_id} prof2_id=${result.rows[0].profesor_2_id} sala_especial=${result.rows[0].sala_especial}`);
       return result.rows[0];
     }
 
     // Crear nuevo registro usando ON CONFLICT para manejar duplicados
     const result = await pool.query(
       `INSERT INTO horas_programables 
-       (codigo, seccion, tipo_hora, cantidad_horas, profesor_1_id, profesor_2_id, especialidades_semestres, titulo, disponibilidad)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (codigo, seccion, tipo_hora, cantidad_horas, profesor_1_id, profesor_2_id, especialidades_semestres, titulo, disponibilidad, sala_especial)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (codigo, seccion, tipo_hora) 
        DO UPDATE SET 
          cantidad_horas = $4,
@@ -380,6 +501,7 @@ async function crearHorarioProgramable(
          especialidades_semestres = $7,
          titulo = $8,
          disponibilidad = $9,
+         sala_especial = $10,
          updated_at = NOW()
        RETURNING *`,
       [
@@ -392,6 +514,7 @@ async function crearHorarioProgramable(
         JSON.stringify(especialidades),
         titulo,
         JSON.stringify(disponibilidad),
+        salaEspecial,
       ]
     );
 
@@ -735,6 +858,12 @@ export async function actualizarCalendarioPruebas(dashboardId) {
       const tieneExamen = metaResult.rows.length > 0 ? metaResult.rows[0].tiene_examen : true;
       const cantidadEvaluaciones = metaResult.rows.length > 0 ? metaResult.rows[0].cantidad_evaluaciones : null;
 
+      // Saltar si no tiene cantidad de evaluaciones válida (>= 1)
+      if (!cantidadEvaluaciones || cantidadEvaluaciones < 1) {
+        console.log(`[ActualizarCalendario] Saltando ${grupo.codigo}-${grupo.seccion} ${grupo.tipo_hora}: sin cantidad de evaluaciones`);
+        continue;
+      }
+
       // 4. Crear/actualizar la prueba_programable con los bloques
       const prueba = await crearPruebaProgramable(
         grupo.codigo,
@@ -753,6 +882,43 @@ export async function actualizarCalendarioPruebas(dashboardId) {
     }
 
     console.log(`[ActualizarCalendario] Creadas/actualizadas ${pruebasCreadas.length} pruebas programables`);
+
+    // 4b. Eliminar pruebas_programables de tipo CLASE/AYUDANTIA/LAB_TALLER que ya no tienen
+    //     horas registradas en este dashboard (el bloque horario fue eliminado)
+    const codigosSeccionesActivos = new Set(
+      Object.keys(grupos).map(clave => {
+        const [cod, sec, tipo] = clave.split('|');
+        return `${cod}|${sec}|${tipo}`;
+      })
+    );
+
+    const todasPruebasCalendario = await pool.query(
+      `SELECT pp.id, pp.codigo, pp.seccion, pp.tipo_prueba
+       FROM pruebas_programables pp
+       WHERE pp.tipo_prueba IN ('CLASE', 'AYUDANTIA', 'LAB/TALLER')`,
+    );
+
+    const pruebasAEliminar = todasPruebasCalendario.rows.filter(pp => {
+      const clave = `${pp.codigo}|${pp.seccion}|${pp.tipo_prueba}`;
+      return !codigosSeccionesActivos.has(clave);
+    });
+
+    for (const pp of pruebasAEliminar) {
+      // Eliminar pruebas_registradas asociadas de este dashboard
+      await pool.query(
+        'DELETE FROM pruebas_registradas WHERE prueba_programable_id = $1 AND dashboard_id = $2',
+        [pp.id, dashboardId]
+      );
+      // Eliminar la prueba_programable si no tiene más registradas en ningún dashboard
+      const remaining = await pool.query(
+        'SELECT COUNT(*) as cnt FROM pruebas_registradas WHERE prueba_programable_id = $1',
+        [pp.id]
+      );
+      if (parseInt(remaining.rows[0].cnt, 10) === 0) {
+        await pool.query('DELETE FROM pruebas_programables WHERE id = $1', [pp.id]);
+        console.log(`[ActualizarCalendario] Eliminada prueba_programable huérfana: ${pp.codigo}-${pp.seccion}-${pp.tipo_prueba}`);
+      }
+    }
 
     // 5. Limpiar pruebas_registradas cuyo bloque ya no existe en la prueba_programable
     const prResult = await pool.query(

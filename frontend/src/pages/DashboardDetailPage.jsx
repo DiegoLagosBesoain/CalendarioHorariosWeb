@@ -33,6 +33,7 @@ export function DashboardDetailPage() {
   const [filtroHorario, setFiltroHorario] = useState('plan_comun'); // plan_comun, 5to_6to, 7mo_mas
   const [filtroEspecialidad, setFiltroEspecialidad] = useState('TODOS'); // ICI, IOC, ICE, ICC, ICA, ICQ, TODOS
   const [filtroSemestre, setFiltroSemestre] = useState('TODOS'); // 1-11, TODOS
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     loadDashboard();
@@ -82,6 +83,12 @@ export function DashboardDetailPage() {
       const respuestaPruebas = await pruebasProgramablesService.obtenerPruebasProgramables();
       setPruebasProgramables(respuestaPruebas.pruebas || []);
       
+      // Incrementar refreshKey para que TimeTable recargue horas registradas con conflictos actualizados
+      setRefreshKey(prev => prev + 1);
+
+      // Recargar pruebas registradas con conflictos actualizados
+      await cargarPruebasRegistradas();
+
       console.log('Horarios cargados:', respuesta.horarios);
       console.log('Pruebas cargadas:', respuestaPruebas.pruebas);
     } catch (err) {
@@ -213,6 +220,60 @@ export function DashboardDetailPage() {
     }
   };
 
+  const handleEnviarPruebas = async () => {
+    const diccionario = {};
+
+    const ABREV_TIPO = {
+      'CLASE': 'CLAS',
+      'AYUDANTIA': 'AYUD',
+      'EXAMEN': 'EXAM',
+      'TARDE': 'TARDE',
+      'LAB/TALLER': 'LAB/TALLER'
+    };
+
+    for (const prueba of pruebasRegistradas) {
+      const tipo = (prueba.tipo_prueba || '').toUpperCase();
+
+      const clave = `${prueba.codigo}${prueba.seccion}`;
+      if (!diccionario[clave]) {
+        diccionario[clave] = [];
+      }
+
+      const formatTime = (t) => {
+        if (!t) return null;
+        const s = String(t).substring(0, 5);
+        const [h, m] = s.split(':');
+        return `${parseInt(h)}:${m}`;
+      };
+
+      const horaInicio = formatTime(prueba.hora_inicio);
+      const horaFin = formatTime(prueba.hora_fin);
+      const horario = horaInicio && horaFin ? `${horaInicio}-${horaFin}` : null;
+
+      diccionario[clave].push({
+        fecha: new Date(prueba.fecha).toISOString().split('T')[0],
+        horario,
+        tipo: ABREV_TIPO[tipo] || tipo
+      });
+    }
+
+    console.log('JSON Pruebas para enviar:', JSON.stringify(diccionario, null, 2));
+
+    try {
+      setCargandoDatos(true);
+      setError('');
+      const resultado = await pruebasRegistradasService.enviarPruebasAGoogleSheets(dashboardId, diccionario);
+      console.log('Respuesta de Google Sheets (pruebas):', resultado);
+      alert('Pruebas enviadas correctamente a Google Sheets');
+    } catch (err) {
+      setError(err.message);
+      console.error('Error al enviar pruebas:', err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setCargandoDatos(false);
+    }
+  };
+
   const handleActualizarCalendario = async () => {
     try {
       setCargandoDatos(true);
@@ -325,6 +386,15 @@ export function DashboardDetailPage() {
             >
               {cargandoDatos ? 'Procesando...' : 'Actualizar Calendario'}
             </button>
+            {pruebasRegistradas.length > 0 && (
+              <button 
+                className="send-pruebas-btn" 
+                onClick={handleEnviarPruebas}
+                disabled={cargandoDatos}
+              >
+                {cargandoDatos ? 'Enviando...' : 'Enviar Pruebas'}
+              </button>
+            )}
           </>
         )}
       </div>
@@ -416,6 +486,7 @@ export function DashboardDetailPage() {
               onFiltroEspecialidadChange={setFiltroEspecialidad}
               onFiltroSemestreChange={setFiltroSemestre}
               filtrarHorario={filtrarHorario}
+              refreshKey={refreshKey}
             />
           </main>
         ) : (

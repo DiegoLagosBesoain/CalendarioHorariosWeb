@@ -176,12 +176,39 @@ export function CalendarView({
     }
     if (!Array.isArray(bloques) || bloques.length === 0) return null;
 
-    const diasHorario = [...new Set(bloques.map(b => b.dia).filter(Boolean))];
-    if (diasHorario.length === 0) return null;
-
     const diasSemanaFull = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     const fechaPrueba = new Date(prueba.fecha);
     const diaPrueba = diasSemanaFull[fechaPrueba.getDay()];
+
+    // Normalizar hora
+    const norm = (h) => {
+      if (!h) return null;
+      const [hh, mm] = String(h).substring(0, 5).split(':');
+      return `${parseInt(hh)}:${mm}`;
+    };
+
+    const horaInicio = norm(prueba.hora_inicio);
+    const horaFin = norm(prueba.hora_fin);
+
+    if (horaInicio && horaFin) {
+      // Buscar el bloque específico que coincida con la hora seleccionada
+      const bloqueSeleccionado = bloques.find(b => {
+        const bInicio = b.inicio ? norm(b.inicio) : null;
+        const bFin = b.fin ? norm(b.fin) : null;
+        return bInicio === horaInicio && bFin === horaFin;
+      });
+
+      if (bloqueSeleccionado && bloqueSeleccionado.dia) {
+        if (bloqueSeleccionado.dia !== diaPrueba) {
+          return `📅 Día no coincide: bloque ${bloqueSeleccionado.dia} ${horaInicio}-${horaFin} pero prueba en ${diaPrueba}`;
+        }
+        return null;
+      }
+    }
+
+    // Si no hay hora seleccionada, verificar contra todos los días
+    const diasHorario = [...new Set(bloques.map(b => b.dia).filter(Boolean))];
+    if (diasHorario.length === 0) return null;
 
     if (!diasHorario.includes(diaPrueba)) {
       return `📅 Día no coincide: ${tipo} es ${diasHorario.join('/')} pero prueba en ${diaPrueba}`;

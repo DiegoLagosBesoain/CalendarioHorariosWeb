@@ -1,6 +1,7 @@
 import express from 'express';
 import { pool } from '../db/pool.js';
 import * as pruebasRegistradasService from '../services/pruebas-registradas.service.js';
+import * as appScriptService from '../services/appscript.service.js';
 import { reevaluarConflictosPruebasDashboard } from '../services/conflict-detector.service.js';
 
 const router = express.Router();
@@ -184,6 +185,31 @@ router.delete('/dashboard/:dashboardId', async (req, res) => {
     res.json({ message: `${count} pruebas registradas eliminadas` });
   } catch (err) {
     console.error('Error al limpiar pruebas registradas:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/pruebas-registradas/enviar-sheets/:dashboardId
+ * Armar diccionario de pruebas y enviarlo a Google Sheets
+ */
+router.post('/enviar-sheets/:dashboardId', async (req, res) => {
+  try {
+    const { dashboardId } = req.params;
+    const { diccionario } = req.body;
+
+    if (!diccionario || typeof diccionario !== 'object') {
+      return res.status(400).json({ error: 'Se requiere el diccionario de pruebas' });
+    }
+
+    const resultado = await appScriptService.enviarPruebasASheets(diccionario);
+
+    res.json({
+      mensaje: 'Pruebas enviadas a Google Sheets exitosamente',
+      resultado
+    });
+  } catch (err) {
+    console.error('Error al enviar pruebas a Google Sheets:', err);
     res.status(500).json({ error: err.message });
   }
 });

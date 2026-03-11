@@ -367,6 +367,68 @@ async function validarDobleAsignacionProfesor(horaProgramableId, dashboardId, di
 }
 
 /**
+ * Validador 5: Prevenir doble asignación de sala especial
+ * Verifica que la sala especial asignada a esta hora no esté ya ocupada
+ * en el mismo día y bloque horario EN CUALQUIER dashboard y horario.
+ * A diferencia de profesores, aplica incluso entre mismo código distinta sección.
+ */
+async function validarDobleAsignacionSalaEspecial(horaProgramableId, dashboardId, dia, horaInicio) {
+  try {
+    // Obtener la sala_especial del hora_programable que se quiere registrar
+    const progResult = await pool.query(
+      `SELECT hp.sala_especial, hp.codigo, hp.seccion, hp.titulo, hp.tipo_hora
+       FROM horas_programables hp
+       WHERE hp.id = $1`,
+      [horaProgramableId]
+    );
+
+    if (progResult.rows.length === 0) {
+      return { isValid: true };
+    }
+
+    const { sala_especial, codigo, seccion, titulo, tipo_hora } = progResult.rows[0];
+
+    // Si no tiene sala especial asignada, no hay nada que validar
+    if (!sala_especial) {
+      return { isValid: true };
+    }
+
+    // Buscar todas las horas registradas en el mismo día y hora_inicio
+    // que tengan la misma sala_especial
+    const conflictoResult = await pool.query(
+      `SELECT hr.id, hr.dashboard_id, hr.horario, hr.dia_semana, hr.hora_inicio,
+              hp.codigo as conflicto_codigo, hp.seccion as conflicto_seccion, 
+              hp.titulo as conflicto_titulo, hp.tipo_hora, hp.sala_especial
+       FROM horas_registradas hr
+       JOIN horas_programables hp ON hr.hora_programable_id = hp.id
+       WHERE hr.dia_semana = $1
+       AND hr.hora_inicio = $2
+       AND hp.sala_especial = $3`,
+      [dia, horaInicio, sala_especial]
+    );
+
+    if (conflictoResult.rows.length === 0) {
+      return { isValid: true };
+    }
+
+    // Hay un conflicto - la sala especial ya está ocupada en ese bloque
+    const conflicto = conflictoResult.rows[0];
+
+    const horaInicioNorm = normalizarHora(typeof horaInicio === 'string' ? horaInicio.substring(0, 5) : horaInicio);
+    const bloqueCompleto = BLOQUES_MAP[horaInicioNorm] || horaInicioNorm;
+
+    return {
+      isValid: false,
+      warning: `🏫 Sala especial ocupada: "${sala_especial}" ya está asignada a ${conflicto.conflicto_titulo || conflicto.conflicto_codigo} Sección ${conflicto.conflicto_seccion} (${conflicto.tipo_hora}) el ${dia} ${bloqueCompleto} (horario: ${conflicto.horario}).`,
+      conflictingHoraRegId: conflicto.id
+    };
+  } catch (err) {
+    console.error('Error en validarDobleAsignacionSalaEspecial:', err);
+    return { isValid: true }; // No bloquear en caso de error
+  }
+}
+
+/**
  * Ejecutar todas las validaciones disponibles
  * Retorna { hasWarnings: boolean, warnings: string[], hasErrors: boolean, errors: string[], conflictIds: number[] }
  */
@@ -421,6 +483,19 @@ async function ejecutarValidaciones(horaProgramableId, dashboardId, horario, dia
     errors.push(resultadoDobleAsignacion.error);
   }
 
+  // Validador 5: Doble asignación de sala especial (across all dashboards/timetables)
+  const resultadoSalaEspecial = await validarDobleAsignacionSalaEspecial(horaProgramableId, dashboardId, dia, horaInicio);
+  
+  if (!resultadoSalaEspecial.isValid && resultadoSalaEspecial.warning) {
+    warnings.push(resultadoSalaEspecial.warning);
+    if (resultadoSalaEspecial.conflictingHoraRegId) {
+      conflictIds.push(resultadoSalaEspecial.conflictingHoraRegId);
+    }
+  }
+  if (resultadoSalaEspecial.error) {
+    errors.push(resultadoSalaEspecial.error);
+  }
+
   return {
     hasWarnings: warnings.length > 0,
     warnings,
@@ -436,5 +511,6 @@ export {
   validarHorarioProtegido,
   validarDisponibilidadProfesor,
   validarDobleAsignacionProfesor,
+  validarDobleAsignacionSalaEspecial,
   ejecutarValidaciones
 };

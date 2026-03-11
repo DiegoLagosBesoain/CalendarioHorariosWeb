@@ -13,7 +13,8 @@ export function TimeTable({
   filtroSemestre = 'TODOS',
   onFiltroEspecialidadChange = () => {},
   onFiltroSemestreChange = () => {},
-  filtrarHorario = () => true
+  filtrarHorario = () => true,
+  refreshKey = 0
 }) {
   const [modoVisualizacion, setModoVisualizacion] = useState('cascada');
   const [semestreActual, setSemestreActual] = useState(0);
@@ -68,12 +69,42 @@ export function TimeTable({
           nuevosConflicting.add(pi.instanceId);
           
           // Buscar los items en conflicto para mostrar detalles
-          pi.conflictos.forEach(conflictId => {
-            const itemEnConflicto = todosLosItems.find(item => item.id === conflictId);
-            if (itemEnConflicto) {
-              addWarning(pi.instanceId, `⚠️ Conflicto con ${itemEnConflicto.titulo} Sec ${itemEnConflicto.seccion}`);
+          pi.conflictos.forEach(conflicto => {
+            // Soportar formato viejo (número) y nuevo (objeto {id, tipo})
+            const conflictId = typeof conflicto === 'object' ? conflicto.id : conflicto;
+            const tipo = typeof conflicto === 'object' ? conflicto.tipo : null;
+
+            if (tipo === 'disponibilidad' || conflictId === -3) {
+              addWarning(pi.instanceId, `🚫 Profesor no disponible en este horario`);
+            } else if (tipo === 'profesor') {
+              const itemEnConflicto = todosLosItems.find(item => item.id === conflictId);
+              if (itemEnConflicto) {
+                addWarning(pi.instanceId, `👤 Profesor compartido con ${itemEnConflicto.titulo} Sec ${itemEnConflicto.seccion}`);
+              } else {
+                addWarning(pi.instanceId, `👤 Profesor asignado a otro curso en este horario`);
+              }
+            } else if (tipo === 'semestre') {
+              const itemEnConflicto = todosLosItems.find(item => item.id === conflictId);
+              if (itemEnConflicto) {
+                addWarning(pi.instanceId, `⚠️ Toque de semestre con ${itemEnConflicto.titulo} Sec ${itemEnConflicto.seccion}`);
+              } else {
+                addWarning(pi.instanceId, `⚠️ Toque de semestre detectado`);
+              }
+            } else if (tipo === 'sala_especial') {
+              const itemEnConflicto = todosLosItems.find(item => item.id === conflictId);
+              if (itemEnConflicto) {
+                addWarning(pi.instanceId, `🏫 Sala especial compartida con ${itemEnConflicto.titulo} Sec ${itemEnConflicto.seccion}`);
+              } else {
+                addWarning(pi.instanceId, `🏫 Sala especial ocupada en este horario`);
+              }
             } else {
-              addWarning(pi.instanceId, `⚠️ Conflicto detectado`);
+              // Formato legacy o desconocido
+              const itemEnConflicto = conflictId ? todosLosItems.find(item => item.id === conflictId) : null;
+              if (itemEnConflicto) {
+                addWarning(pi.instanceId, `⚠️ Conflicto con ${itemEnConflicto.titulo} Sec ${itemEnConflicto.seccion}`);
+              } else {
+                addWarning(pi.instanceId, `⚠️ Conflicto detectado`);
+              }
             }
           });
         }
@@ -93,12 +124,12 @@ export function TimeTable({
     }
   };
 
-  // Cargar horas registradas al iniciar
+  // Cargar horas registradas al iniciar o cuando se recargan datos
   useEffect(() => {
     if (dashboardId) {
       cargarHorasRegistradas();
     }
-  }, [dashboardId]);
+  }, [dashboardId, refreshKey]);
 
   // Re-evaluar conflictos cuando llegan los horariosProgramables (recarga de página)
   useEffect(() => {

@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // ==================== USUARIOS ====================
 export const authService = {
@@ -288,6 +288,19 @@ export const pruebasRegistradasService = {
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error || 'Error limpiando pruebas registradas');
+    }
+    return res.json();
+  },
+
+  async enviarPruebasAGoogleSheets(dashboardId, diccionario) {
+    const res = await fetch(`${API_URL}/pruebas-registradas/enviar-sheets/${dashboardId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ diccionario })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Error enviando pruebas a Google Sheets');
     }
     return res.json();
   }
