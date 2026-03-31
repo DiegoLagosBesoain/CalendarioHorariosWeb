@@ -37,8 +37,8 @@ const COLORES_ESPECIALIDADES = {
   },
 };
 
-// Color de conflicto (amarillo destacado)
-const COLOR_CONFLICTO = '#FFEB3B';
+// Color de conflicto (rojo destacado)
+const COLOR_CONFLICTO = '#FFCDD2';
 
 /**
  * Limpia el número de semestre removiendo letras
@@ -255,7 +255,7 @@ export function getPostitStyle(especialidades_semestres, tieneConflicto = false,
   if (tieneConflicto) {
     return {
       background: COLOR_CONFLICTO,
-      borderLeftColor: '#ff9800',
+      borderLeftColor: '#d32f2f',
     };
   }
   

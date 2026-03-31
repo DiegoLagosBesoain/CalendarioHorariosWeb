@@ -1,18 +1,27 @@
 import express from 'express';
+import bcrypt from 'bcrypt';
 import { pool } from '../db/pool.js';
 
 const router = express.Router();
 
-// Registro de usuario
+// Registro de usuario (protegido por clave admin de entorno)
 router.post('/register', async (req, res) => {
   try {
-    const { nombre, mail, password } = req.body;
+    const { nombre, mail, password, adminPassword } = req.body;
 
-    if (!nombre || !mail || !password) {
+    if (!nombre || !mail || !password || !adminPassword) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
     }
 
-    // Verificar si el usuario ya existe
+    const expectedAdminPassword = process.env.ADMIN_REGISTRATION_PASSWORD;
+    if (!expectedAdminPassword) {
+      return res.status(500).json({ error: 'ADMIN_REGISTRATION_PASSWORD no configurada' });
+    }
+
+    if (adminPassword !== expectedAdminPassword) {
+      return res.status(403).json({ error: 'Clave de administrador inválida' });
+    }
+
     const existing = await pool.query(
       'SELECT id FROM usuarios WHERE mail = $1',
       [mail]
@@ -22,10 +31,10 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'El correo ya está registrado' });
     }
 
-    // Insertar nuevo usuario con rol por defecto
+    const passwordHash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO usuarios (nombre, mail, rol) VALUES ($1, $2, $3) RETURNING id, nombre, mail, rol, created_at',
-      [nombre, mail, 'user'] // Cambiar 'user' si quieres otro rol por defecto
+      'INSERT INTO usuarios (nombre, mail, password_hash, rol) VALUES ($1, $2, $3, $4) RETURNING id, nombre, mail, rol, created_at',
+      [nombre, mail, passwordHash, 'user']
     );
 
     const user = result.rows[0];
@@ -56,7 +65,7 @@ router.post('/login', async (req, res) => {
 
     // Buscar usuario por correo
     const result = await pool.query(
-      'SELECT id, nombre, mail, rol, created_at FROM usuarios WHERE mail = $1',
+      'SELECT id, nombre, mail, rol, created_at, password_hash FROM usuarios WHERE mail = $1',
       [mail]
     );
 
@@ -64,10 +73,13 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    // TODO: Implementar validación de contraseña (hash)
-    // Por ahora, aceptamos cualquier contraseña para demostración
-
     const user = result.rows[0];
+    const passwordOk = await bcrypt.compare(password, user.password_hash || '');
+
+    if (!passwordOk) {
+      return res.status(401).json({ error: 'Credenciales inválidas' });
+    }
+
     res.json({
       message: 'Login exitoso',
       user: {

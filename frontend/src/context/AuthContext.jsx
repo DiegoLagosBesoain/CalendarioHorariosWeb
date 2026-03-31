@@ -16,8 +16,8 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const register = async (nombre, mail, password) => {
-    const userData = await authService.register(nombre, mail, password);
+  const register = async (nombre, mail, password, adminPassword) => {
+    const userData = await authService.register(nombre, mail, password, adminPassword);
     setUser(userData.user);
     localStorage.setItem('user', JSON.stringify(userData.user));
     return userData.user;

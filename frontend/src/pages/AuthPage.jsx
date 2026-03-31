@@ -9,7 +9,8 @@ export function AuthPage() {
     nombre: '',
     mail: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    adminPassword: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,7 +38,8 @@ export function AuthPage() {
           setLoading(false);
           return;
         }
-        await register(formData.nombre, formData.mail, formData.password);
+
+        await register(formData.nombre, formData.mail, formData.password, formData.adminPassword);
       }
       navigate('/dashboards');
     } catch (err) {
@@ -54,14 +56,15 @@ export function AuthPage() {
       nombre: '',
       mail: '',
       password: '',
-      confirmPassword: ''
+      confirmPassword: '',
+      adminPassword: ''
     });
   };
 
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>{isLogin ? 'Iniciar Sesión' : 'Registrarse'}</h1>
+        <h1>{isLogin ? 'Iniciar Sesion' : 'Registrarse'}</h1>
         
         {error && <div className="error-message">{error}</div>}
 
@@ -76,7 +79,7 @@ export function AuthPage() {
               required
             />
           )}
-          
+
           <input
             type="email"
             name="mail"
@@ -94,7 +97,7 @@ export function AuthPage() {
             onChange={handleChange}
             required
           />
-          
+
           {!isLogin && (
             <input
               type="password"
@@ -105,16 +108,27 @@ export function AuthPage() {
               required
             />
           )}
+
+          {!isLogin && (
+            <input
+              type="password"
+              name="adminPassword"
+              placeholder="Clave admin"
+              value={formData.adminPassword}
+              onChange={handleChange}
+              required
+            />
+          )}
           
           <button type="submit" disabled={loading}>
-            {loading ? 'Cargando...' : (isLogin ? 'Iniciar Sesión' : 'Registrarse')}
+            {loading ? 'Cargando...' : (isLogin ? 'Iniciar Sesion' : 'Registrarse')}
           </button>
         </form>
 
         <p className="toggle-mode">
           {isLogin ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}
           <button type="button" onClick={toggleMode} className="link-button">
-            {isLogin ? 'Registrate' : 'Inicia sesión'}
+            {isLogin ? 'Registrate' : 'Inicia sesion'}
           </button>
         </p>
       </div>

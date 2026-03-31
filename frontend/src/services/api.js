@@ -2,13 +2,16 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // ==================== USUARIOS ====================
 export const authService = {
-  async register(nombre, mail, password) {
+  async register(nombre, mail, password, adminPassword) {
     const res = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, mail, password })
+      body: JSON.stringify({ nombre, mail, password, adminPassword })
     });
-    if (!res.ok) throw new Error('Error en registro');
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || 'Error en registro');
+    }
     return res.json();
   },
 
@@ -18,7 +21,10 @@ export const authService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mail, password })
     });
-    if (!res.ok) throw new Error('Error en login');
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || 'Error en login');
+    }
     return res.json();
   },
 

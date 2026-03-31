@@ -191,16 +191,16 @@
 
 .placed-postit.conflicting {
   /* El color de conflicto se aplica dinámicamente desde el componente */
-  box-shadow: 0 0 8px rgba(255, 152, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 8px rgba(211, 47, 47, 0.6), 0 1px 3px rgba(0, 0, 0, 0.1);
   animation: pulse-warning 1.5s ease-in-out infinite;
 }
 
 @keyframes pulse-warning {
   0%, 100% {
-    box-shadow: 0 0 8px rgba(255, 152, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 8px rgba(211, 47, 47, 0.6), 0 1px 3px rgba(0, 0, 0, 0.1);
   }
   50% {
-    box-shadow: 0 0 16px rgba(255, 152, 0, 0.9), 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 16px rgba(211, 47, 47, 0.9), 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 }
 
@@ -210,7 +210,7 @@
 }
 
 .placed-postit.conflicting:hover {
-  box-shadow: 0 0 12px rgba(255, 152, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 0 12px rgba(211, 47, 47, 0.8), 0 2px 6px rgba(0, 0, 0, 0.15);
   filter: brightness(1.05);
 }
 

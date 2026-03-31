@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(255) NOT NULL,
     mail VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
     rol VARCHAR(50) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -160,6 +161,20 @@ CREATE INDEX IF NOT EXISTS idx_usuarios_mail ON usuarios(mail);
 -- Agregar columna disponibilidad a horas_programables si no existe
 DO $$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'usuarios' AND column_name = 'password_hash'
+  ) THEN
+    ALTER TABLE usuarios ADD COLUMN password_hash VARCHAR(255);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM usuarios WHERE password_hash IS NULL OR password_hash = ''
+  ) THEN
+    ALTER TABLE usuarios
+    ALTER COLUMN password_hash SET NOT NULL;
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'horas_programables' AND column_name = 'disponibilidad'

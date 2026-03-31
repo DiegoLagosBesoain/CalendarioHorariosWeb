@@ -5,6 +5,6 @@ export default defineConfig({
   plugins: [react()],
   preview: {
     host: true,
-    allowedHosts: ["calendariohorarioswebfrontend.onrender.com"]
+    allowedHosts: ["calendariohorarioswebfrontend.onrender.com", "localhost"]
   }
 })
