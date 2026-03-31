@@ -1,4 +1,4 @@
-import { pool } from '../db/pool.js';
+import  pool  from '../db/pool.js';
 
 /**
  * Sistema modular de validaciones para horas registradas

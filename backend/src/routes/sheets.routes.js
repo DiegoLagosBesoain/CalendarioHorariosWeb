@@ -9,7 +9,7 @@ import {
   actualizarCalendarioPruebas,
 } from "../services/maestros.service.js";
 import { reevaluarConflictosDashboard, reevaluarConflictosPruebasDashboard } from "../services/conflict-detector.service.js";
-import { pool } from "../db/pool.js";
+import  pool  from "../db/pool.js";
 
 const router = express.Router();
 
