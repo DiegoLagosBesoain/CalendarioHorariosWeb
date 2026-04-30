@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS horas_programables (
     disponibilidad JSON DEFAULT '{}',
     sala_id INTEGER,
     sala_especial VARCHAR(255),
+    distribucion_horario VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_horas_prog_codigo_seccion_tipo UNIQUE (codigo, seccion, tipo_hora),
@@ -249,6 +250,17 @@ BEGIN
     WHERE table_name = 'horas_programables' AND column_name = 'sala_especial'
   ) THEN
     ALTER TABLE horas_programables ADD COLUMN sala_especial VARCHAR(255);
+  END IF;
+END $$;
+
+-- Agregar columna distribucion_horario a horas_programables si no existe
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'horas_programables' AND column_name = 'distribucion_horario'
+  ) THEN
+    ALTER TABLE horas_programables ADD COLUMN distribucion_horario VARCHAR(255);
   END IF;
 END $$;
 

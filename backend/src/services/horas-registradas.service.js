@@ -207,6 +207,7 @@ async function limpiarDashboard(dashboardId) {
  */
 async function armarDiccionarioParaGoogleSheets(dashboardId) {
   const horas = await obtenerPorDashboard(dashboardId);
+  const slotsProcesados = new Set();
   
   // Helper: abreviar tipo de hora
   const abreviarTipo = (tipo) => {
@@ -238,6 +239,16 @@ async function armarDiccionarioParaGoogleSheets(dashboardId) {
   const horasPorCursoYDia = {};
   
   for (const hora of horas) {
+    const horaInicioNormalizada = normalizarTiempo(hora.hora_inicio.substring(0, 5));
+    const horaFinNormalizada = normalizarTiempo(hora.hora_fin.substring(0, 5));
+    const slotKey = `${hora.hora_programable_id}|${hora.dia_semana}|${horaInicioNormalizada}|${horaFinNormalizada}`;
+
+    // El mismo bloque espejado en distintos horarios se exporta solo una vez.
+    if (slotsProcesados.has(slotKey)) {
+      continue;
+    }
+    slotsProcesados.add(slotKey);
+
     const clave = `${hora.codigo}${hora.seccion}`;
     
     if (!horasPorCursoYDia[clave]) {
@@ -251,8 +262,8 @@ async function armarDiccionarioParaGoogleSheets(dashboardId) {
     }
     
     const tipo = hora.tipo_hora;
-    const horaInicio = normalizarTiempo(hora.hora_inicio.substring(0, 5));
-    const horaFin = normalizarTiempo(hora.hora_fin.substring(0, 5));
+    const horaInicio = horaInicioNormalizada;
+    const horaFin = horaFinNormalizada;
     
     if (!horasPorCursoYDia[clave][hora.dia_semana][tipo]) {
       horasPorCursoYDia[clave][hora.dia_semana][tipo] = [];

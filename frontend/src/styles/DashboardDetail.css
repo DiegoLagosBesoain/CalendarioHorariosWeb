@@ -131,6 +131,28 @@
   opacity: 0.7;
 }
 
+.use-backup-btn {
+  padding: 12px 24px;
+  background: #0ca678;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.3s, transform 0.2s;
+}
+
+.use-backup-btn:hover:not(:disabled) {
+  background: #099268;
+  transform: translateY(-2px);
+}
+
+.use-backup-btn:disabled {
+  background: #63e6be;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .delete-data-btn {
   padding: 12px 24px;
   background: #ff6b6b;

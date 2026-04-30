@@ -52,6 +52,18 @@ export const sheetsService = {
     return res.json();
   },
 
+  async usarRespaldo(dashboardId) {
+    const res = await fetch(`${API_URL}/sheets/usar-respaldo/${dashboardId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || 'Error aplicando respaldo');
+    }
+    return res.json();
+  },
+
   async getHorariosProgramables() {
     const res = await fetch(`${API_URL}/sheets/horas-programables`);
     if (!res.ok) throw new Error('Error obteniendo horarios programables');

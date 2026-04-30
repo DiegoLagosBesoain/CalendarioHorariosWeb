@@ -166,6 +166,12 @@ async function reevaluarConflictosDashboard(dashboardId) {
           const idx2 = indices[j];
           const hora1 = horas[idx1];
           const hora2 = horas[idx2];
+
+          // Si son la misma hora_programable espejada en distintos horarios, no es conflicto.
+          if (hora1.hora_programable_id === hora2.hora_programable_id) {
+            continue;
+          }
+
           const profs1 = profesoresPorHora[idx1];
           const profs2 = profesoresPorHora[idx2];
 
@@ -201,6 +207,11 @@ async function reevaluarConflictosDashboard(dashboardId) {
           const idx2 = indices[j];
           const hora1 = horas[idx1];
           const hora2 = horas[idx2];
+
+          // Si son la misma hora_programable espejada en distintos horarios, no es conflicto.
+          if (hora1.hora_programable_id === hora2.hora_programable_id) {
+            continue;
+          }
 
           // Ambas deben tener sala_especial asignada y ser la misma
           if (hora1.sala_especial && hora2.sala_especial &&

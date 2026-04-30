@@ -10,6 +10,7 @@ import {
 } from "../services/maestros.service.js";
 import { reevaluarConflictosDashboard, reevaluarConflictosPruebasDashboard } from "../services/conflict-detector.service.js";
 import  pool  from "../db/pool.js";
+import { usarRespaldoDesdeHoja } from "../services/sheets-sync.service.js";
 
 const router = express.Router();
 
@@ -93,6 +94,41 @@ router.post("/load-maestros", async (req, res) => {
     });
   } catch (err) {
     console.error("Error en load-maestros:", err);
+    res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * POST /api/sheets/usar-respaldo/:dashboardId
+ * Carga maestros como el flujo actual + restaura horas/pruebas registradas desde MAESTRO
+ */
+router.post("/usar-respaldo/:dashboardId", async (req, res) => {
+  try {
+    const { dashboardId } = req.params;
+    const resultado = await usarRespaldoDesdeHoja(parseInt(dashboardId, 10));
+
+    res.json({
+      ok: true,
+      mensaje: "Respaldo aplicado correctamente",
+      resumen: {
+        maestrosProcesados: resultado.maestrosProcesados,
+        horariosProgramablesProcesados: resultado.horariosProgramablesProcesados,
+        horasRestauradas: resultado.horasRestauradas,
+        pruebasRestauradas: resultado.pruebasRestauradas,
+        pruebasCalendarioCreadas: resultado.pruebasCalendarioCreadas,
+        pruebasCalendarioEliminadas: resultado.pruebasCalendarioEliminadas,
+        conflictosHoras: resultado.conflictosHoras,
+        conflictosPruebas: resultado.conflictosPruebas,
+        advertencias: resultado.advertencias,
+      },
+      horarios: resultado.horarios,
+      pruebas: resultado.pruebas,
+    });
+  } catch (err) {
+    console.error("Error en usar-respaldo:", err);
     res.status(500).json({
       ok: false,
       error: err.message,

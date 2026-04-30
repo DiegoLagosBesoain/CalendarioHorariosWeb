@@ -232,11 +232,16 @@ export function TimeTable({
 
   // Calcular horas usadas de un programable en TODOS los semestres
   const getHorasUsadas = (horaProgId) => {
-    let total = 0;
+    const bloquesUnicos = new Set();
     Object.values(placedItems).forEach(semItems => {
-      total += semItems.filter(pi => pi.hora_programable_id === horaProgId).length;
+      semItems
+        .filter(pi => pi.hora_programable_id === horaProgId)
+        .forEach((pi) => {
+          // El mismo bloque espejado en distintos horarios cuenta como una sola hora.
+          bloquesUnicos.add(`${pi.dia}|${pi.bloqueIndex}`);
+        });
     });
-    return total;
+    return bloquesUnicos.size;
   };
 
   // Verificar si se puede agregar más instancias de un programable
@@ -346,7 +351,10 @@ export function TimeTable({
                           // Recargar desde el servidor para reflejar cambios en conflictos
                           cargarHorasRegistradas();
                         })
-                        .catch(err => console.error('Error actualizando hora:', err));
+                        .catch(err => {
+                          console.error('Error actualizando hora:', err);
+                          alert(`Error: ${err.message}`);
+                        });
                       return;
                     }
                     
@@ -366,7 +374,10 @@ export function TimeTable({
                         // Recargar desde el servidor para reflejar conflictos correctamente
                         cargarHorasRegistradas();
                       })
-                      .catch(err => console.error('Error creando hora registrada:', err));
+                      .catch(err => {
+                        console.error('Error creando hora registrada:', err);
+                        alert(`Error: ${err.message}`);
+                      });
                   }}
                 >
                   <div className="cell-content">
@@ -388,6 +399,7 @@ export function TimeTable({
                         const colorStyle = prog 
                           ? getPostitStyle(prog.especialidades_semestres, tieneConflicto, getTipoHorario(semestre.id))
                           : {};
+                        const distribucion = prog && prog.distribucion_horario != null ? String(prog.distribucion_horario).trim() : '';
                         
                         return (
                         <div
@@ -427,7 +439,7 @@ export function TimeTable({
                               </button>
                             </div>
                             <div className="postit-title-small">{pi.titulo || '-'}</div>
-                            <div className="postit-type">{pi.tipo_hora}</div>
+                            <div className="postit-type">{pi.tipo_hora}{distribucion ? ` • ${distribucion}` : ''}</div>
                           </div>
                         </div>
                       );

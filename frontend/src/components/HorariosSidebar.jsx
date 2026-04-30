@@ -108,6 +108,7 @@ export function HorariosSidebar({
     const horasUsadas = getHorasUsadas(h.id);
     const canAdd = puedeAgregar(h.id, h.cantidad_horas);
     const isFull = horasUsadas >= h.cantidad_horas;
+    const distribucion = h.distribucion_horario != null ? String(h.distribucion_horario).trim() : '';
     
     // Obtener el estilo de color basado en especialidades y semestres
     const colorStyle = getPostitStyle(h.especialidades_semestres, false, tipoHorario);
@@ -134,7 +135,7 @@ export function HorariosSidebar({
       >
         <div className="postit-title">{h.codigo}-{h.seccion}</div>
         <div className="postit-subtitle">{h.titulo || 'Sin título'}</div>
-        <div className="postit-body">{h.tipo_hora}</div>
+        <div className="postit-body">{h.tipo_hora}{distribucion ? ` • ${distribucion}` : ''}</div>
         <div className="postit-footer">
           <span className="postit-hours">{horasUsadas}/{h.cantidad_horas}h</span>
           {isFull && <span className="postit-badge">⚠️ Lleno</span>}

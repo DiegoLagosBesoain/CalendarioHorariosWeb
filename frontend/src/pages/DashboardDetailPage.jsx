@@ -99,6 +99,47 @@ export function DashboardDetailPage() {
     }
   };
 
+  const handleUsarRespaldo = async () => {
+    try {
+      setCargandoDatos(true);
+      setError('');
+
+      const respuesta = await sheetsService.usarRespaldo(dashboardId);
+
+      setHorariosProgramables(respuesta.horarios || []);
+      setPruebasProgramables(respuesta.pruebas || []);
+      setMostrarHorarios(true);
+
+      // Forzar recarga de horas registradas en la grilla
+      setRefreshKey(prev => prev + 1);
+      await cargarPruebasRegistradas();
+
+      const resumen = respuesta.resumen || {};
+      const advertencias = Array.isArray(resumen.advertencias) ? resumen.advertencias : [];
+
+      if (advertencias.length > 0) {
+        console.warn('Advertencias al usar respaldo:', advertencias);
+      }
+
+      let mensaje = 'Respaldo aplicado correctamente';
+      mensaje += `\nHoras restauradas: ${resumen.horasRestauradas ?? 0}`;
+      mensaje += `\nPruebas restauradas: ${resumen.pruebasRestauradas ?? 0}`;
+      mensaje += `\nConflictos horas: ${resumen.conflictosHoras ?? 0}`;
+      mensaje += `\nConflictos pruebas: ${resumen.conflictosPruebas ?? 0}`;
+      if (advertencias.length > 0) {
+        mensaje += `\nAdvertencias: ${advertencias.length} (revisa la consola)`;
+      }
+
+      alert(mensaje);
+    } catch (err) {
+      setError(err.message);
+      console.error('Error usando respaldo:', err);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setCargandoDatos(false);
+    }
+  };
+
   const cargarPruebasRegistradas = async () => {
     try {
       const { pruebasRegistradas: prs } = await pruebasRegistradasService.obtenerPorDashboard(dashboardId);
@@ -178,25 +219,6 @@ export function DashboardDetailPage() {
       cargarPruebasRegistradas();
     }
   }, [dashboardId]);
-
-  const handleLimpiarDatos = async () => {
-    if (!window.confirm('¿Seguro que deseas eliminar todos los horarios programables?')) {
-      return;
-    }
-
-    try {
-      setCargandoDatos(true);
-      await sheetsService.limpiarHorariosProgramables();
-      setHorariosProgramables([]);
-      setMostrarHorarios(false);
-      console.log('Datos limpiados');
-    } catch (err) {
-      setError(err.message);
-      console.error('Error limpiando datos:', err);
-    } finally {
-      setCargandoDatos(false);
-    }
-  };
 
   const handleEnviarDatos = async () => {
     try {
@@ -363,15 +385,15 @@ export function DashboardDetailPage() {
         >
           {cargandoDatos ? 'Cargando datos...' : 'Cargar Datos'}
         </button>
+        <button 
+          className="use-backup-btn" 
+          onClick={handleUsarRespaldo}
+          disabled={cargandoDatos}
+        >
+          {cargandoDatos ? 'Procesando...' : 'Usar Respaldo'}
+        </button>
         {horariosProgramables.length > 0 && (
           <>
-            <button 
-              className="delete-data-btn" 
-              onClick={handleLimpiarDatos}
-              disabled={cargandoDatos}
-            >
-              Limpiar Datos
-            </button>
             <button 
               className="send-data-btn" 
               onClick={handleEnviarDatos}

@@ -3,6 +3,7 @@ import * as horasRegistradasService from '../services/horas-registradas.service.
 import * as appScriptService from '../services/appscript.service.js';
 import { ejecutarValidaciones } from '../validators/hora-registrada.validators.js';
 import { reevaluarConflictosDashboard } from '../services/conflict-detector.service.js';
+import pool from '../db/pool.js';
 
 
 const router = express.Router();
@@ -15,6 +16,69 @@ const diaNumeroPorNombre = {
   'Jueves': 4,
   'Viernes': 5
 };
+
+const ORDEN_HORARIOS = ['plan_comun', '5to_6to', '7mo_8vo', '9no_10_11'];
+
+function normalizarTexto(valor) {
+  return String(valor ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+}
+
+function obtenerHorariosObjetivo(especialidadesSemestres, horarioSolicitado) {
+  const horarios = new Set();
+
+  if (horarioSolicitado && ORDEN_HORARIOS.includes(horarioSolicitado)) {
+    horarios.add(horarioSolicitado);
+  }
+
+  let parsed = especialidadesSemestres;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch (_e) {
+      parsed = null;
+    }
+  }
+
+  const items = [];
+  if (Array.isArray(parsed)) {
+    parsed.forEach((item) => {
+      if (item && typeof item === 'object') {
+        items.push({ nombre: item.nombre, semestre: item.semestre });
+      }
+    });
+  } else if (parsed && typeof parsed === 'object') {
+    Object.entries(parsed).forEach(([nombre, val]) => {
+      if (Array.isArray(val)) {
+        val.forEach((semestre) => items.push({ nombre, semestre }));
+      } else {
+        items.push({ nombre, semestre: val });
+      }
+    });
+  }
+
+  items.forEach((item) => {
+    const nombre = normalizarTexto(item.nombre);
+    const semestre = Number(String(item.semestre ?? '').replace(/[^0-9]/g, ''));
+
+    if (nombre === 'PLAN COMUN' || nombre === 'PLAN_COMUN') {
+      horarios.add('plan_comun');
+    }
+
+    if (!Number.isNaN(semestre)) {
+      if (semestre <= 4) horarios.add('plan_comun');
+      if (semestre >= 5 && semestre <= 6) horarios.add('5to_6to');
+      if (semestre >= 7 && semestre <= 8) horarios.add('7mo_8vo');
+      if (semestre >= 9) horarios.add('9no_10_11');
+    }
+  });
+
+  const ordenados = ORDEN_HORARIOS.filter((h) => horarios.has(h));
+  return ordenados.length > 0 ? ordenados : ['plan_comun'];
+}
 
 // Bloques de horarios
 const BLOQUES = [
@@ -123,6 +187,35 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Bloque inválido' });
     }
 
+    const progResult = await pool.query(
+      `SELECT id, especialidades_semestres, codigo, seccion, tipo_hora
+       FROM horas_programables
+       WHERE id = $1`,
+      [horaProgramableId]
+    );
+
+    if (progResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Hora programable no encontrada' });
+    }
+
+    const existenteMismoBloque = await pool.query(
+      `SELECT id
+       FROM horas_registradas
+       WHERE hora_programable_id = $1
+         AND dashboard_id = $2
+         AND dia_semana = $3
+         AND hora_inicio = $4::time
+         AND hora_fin = $5::time
+       LIMIT 1`,
+      [horaProgramableId, dashboardId, dia, bloque.inicio, bloque.fin]
+    );
+
+    if (existenteMismoBloque.rows.length > 0) {
+      return res.status(400).json({
+        error: 'Esta hora ya está registrada para el mismo curso/sección/tipo en ese bloque'
+      });
+    }
+
     // Convertir el día a número
     const diaNumero = diaNumeroPorNombre[dia] || 1;
 
@@ -137,22 +230,32 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const horaRegistrada = await horasRegistradasService.crear(
-      horaProgramableId,
-      dashboardId,
-      diaNumero,
-      bloqueIndex,
-      bloque.inicio,
-      bloque.fin,
+    const horariosObjetivo = obtenerHorariosObjetivo(
+      progResult.rows[0].especialidades_semestres,
       semestreId
     );
+
+    const horasCreadas = [];
+    for (const horarioObjetivo of horariosObjetivo) {
+      const horaRegistrada = await horasRegistradasService.crear(
+        horaProgramableId,
+        dashboardId,
+        diaNumero,
+        bloqueIndex,
+        bloque.inicio,
+        bloque.fin,
+        horarioObjetivo
+      );
+      horasCreadas.push(horaRegistrada);
+    }
 
     // Re-evaluar TODOS los conflictos del dashboard de forma centralizada
     await reevaluarConflictosDashboard(dashboardId);
 
     // Retornar la hora registrada junto con las advertencias
     res.json({ 
-      horaRegistrada,
+      horaRegistrada: horasCreadas[0],
+      horasRegistradas: horasCreadas,
       warnings: validationResult.warnings 
     });
   } catch (err) {
@@ -180,23 +283,80 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Bloque inválido' });
     }
 
-    const diaNumero = diaNumeroPorNombre[dia] || 1;
-
-    const horaRegistrada = await horasRegistradasService.actualizar(
-      id,
-      diaNumero,
-      bloque.inicio,
-      bloque.fin
-    );
-
-    // Obtener el dashboardId de la hora actualizada
-    const horaCompleta = await horasRegistradasService.obtenerPorId(id);
-    if (horaCompleta && horaCompleta.dashboard_id) {
-      // Re-evaluar TODOS los conflictos del dashboard
-      await reevaluarConflictosDashboard(horaCompleta.dashboard_id);
+    const horaBase = await horasRegistradasService.obtenerPorId(id);
+    if (!horaBase) {
+      return res.status(404).json({ error: 'Hora registrada no encontrada' });
     }
 
-    res.json({ horaRegistrada });
+    const horaInicioActual = String(horaBase.hora_inicio).substring(0, 8);
+    const horaFinActual = String(horaBase.hora_fin).substring(0, 8);
+
+    const existeEnDestino = await pool.query(
+      `SELECT id
+       FROM horas_registradas
+       WHERE hora_programable_id = $1
+         AND dashboard_id = $2
+         AND dia_semana = $3
+         AND hora_inicio = $4::time
+         AND hora_fin = $5::time
+         AND NOT (
+           dia_semana = $6
+           AND hora_inicio = $7::time
+           AND hora_fin = $8::time
+         )
+       LIMIT 1`,
+      [
+        horaBase.hora_programable_id,
+        horaBase.dashboard_id,
+        dia,
+        bloque.inicio,
+        bloque.fin,
+        horaBase.dia_semana,
+        horaInicioActual,
+        horaFinActual,
+      ]
+    );
+
+    if (existeEnDestino.rows.length > 0) {
+      return res.status(400).json({
+        error: 'Ya existe una hora registrada para el mismo curso/sección/tipo en ese bloque destino',
+      });
+    }
+
+    const diaNumero = diaNumeroPorNombre[dia] || 1;
+    const diaSemanaDestino = Object.keys(diaNumeroPorNombre).find(k => diaNumeroPorNombre[k] === diaNumero) || dia;
+
+    const result = await pool.query(
+      `UPDATE horas_registradas
+       SET dia_semana = $1, hora_inicio = $2::time, hora_fin = $3::time, updated_at = CURRENT_TIMESTAMP
+       WHERE hora_programable_id = $4
+         AND dashboard_id = $5
+         AND dia_semana = $6
+         AND hora_inicio = $7::time
+         AND hora_fin = $8::time
+       RETURNING *`,
+      [
+        diaSemanaDestino,
+        bloque.inicio,
+        bloque.fin,
+        horaBase.hora_programable_id,
+        horaBase.dashboard_id,
+        horaBase.dia_semana,
+        horaInicioActual,
+        horaFinActual,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No se encontraron horas para actualizar' });
+    }
+
+    await reevaluarConflictosDashboard(horaBase.dashboard_id);
+
+    res.json({
+      horaRegistrada: result.rows[0],
+      horasRegistradas: result.rows,
+    });
   } catch (err) {
     console.error('Error al actualizar hora registrada:', err);
     res.status(500).json({ error: err.message });
@@ -213,20 +373,38 @@ router.delete('/:id', async (req, res) => {
     
     // Obtener el dashboardId antes de eliminar
     const horaCompleta = await horasRegistradasService.obtenerPorId(id);
-    const dashboardId = horaCompleta?.dashboard_id;
-    
-    const horaRegistrada = await horasRegistradasService.eliminar(id);
-
-    if (!horaRegistrada) {
+    if (!horaCompleta) {
       return res.status(404).json({ error: 'Hora registrada no encontrada' });
     }
 
-    // Re-evaluar TODOS los conflictos del dashboard después de eliminar
-    if (dashboardId) {
-      await reevaluarConflictosDashboard(dashboardId);
-    }
+    const horaInicioActual = String(horaCompleta.hora_inicio).substring(0, 8);
+    const horaFinActual = String(horaCompleta.hora_fin).substring(0, 8);
 
-    res.json({ message: 'Hora registrada eliminada', horaRegistrada });
+    const eliminadas = await pool.query(
+      `DELETE FROM horas_registradas
+       WHERE hora_programable_id = $1
+         AND dashboard_id = $2
+         AND dia_semana = $3
+         AND hora_inicio = $4::time
+         AND hora_fin = $5::time
+       RETURNING *`,
+      [
+        horaCompleta.hora_programable_id,
+        horaCompleta.dashboard_id,
+        horaCompleta.dia_semana,
+        horaInicioActual,
+        horaFinActual,
+      ]
+    );
+
+    // Re-evaluar TODOS los conflictos del dashboard después de eliminar
+    await reevaluarConflictosDashboard(horaCompleta.dashboard_id);
+
+    res.json({
+      message: `${eliminadas.rows.length} hora(s) registrada(s) eliminada(s)`,
+      horasRegistradas: eliminadas.rows,
+      horaRegistrada: eliminadas.rows[0] || null,
+    });
   } catch (err) {
     console.error('Error al eliminar hora registrada:', err);
     res.status(500).json({ error: err.message });

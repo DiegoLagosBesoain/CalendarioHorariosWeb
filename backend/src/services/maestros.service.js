@@ -144,10 +144,17 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
   const horariosCreados = [];
 
   try {
-    // Filtrar solo los cursos con CURSO MANDANTE = "SI"
-    const cursosMandantes = maestrosData.filter(
-      (curso) => curso["CURSO MANDANTE"] === "SI"
-    );
+    const esMandante = (v) => {
+      const s = String(v || '')
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase();
+      return s === 'SI' || s.startsWith('SI');
+    };
+
+    // Filtrar solo los cursos con CURSO MANDANTE = "SI" (tolerante a "SÍ")
+    const cursosMandantes = maestrosData.filter((curso) => esMandante(curso["CURSO MANDANTE"]));
 
     console.log(
       `Procesando ${cursosMandantes.length} cursos mandantes de ${maestrosData.length} totales`
@@ -260,37 +267,94 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
       // Extraer disponibilidad horaria del profesor desde columnas de días
       const disponibilidad = extraerDisponibilidad(curso);
 
-      // Extraer sala especial y su uso por tipo de hora
-      const salaEspecialNombre = buscarColumna(curso, "Sala especial");
-      const salaEspecialUso = buscarColumna(curso, "USO");
+      // Extraer distribución de horario de clases (para mostrar en post-its)
+      const distribucionHorario = (() => {
+        const raw = buscarColumna(
+          curso,
+          '2+1 o 3? (distribución horario de clases)',
+          '2+1 o 3?',
+          'distribución horario de clases',
+          'distribucion horario de clases'
+        );
+        if (raw == null) return null;
+        const s = String(raw).trim();
+        return s ? s : null;
+      })();
 
-      // Mapeo de abreviaciones de USO a tipo_hora
-      const USO_A_TIPO_HORA = {
-        'CLAS': 'CLASE',
-        'AYUD': 'AYUDANTIA',
-        'LAB/TALLER': 'LAB/TALLER'
+      // Extraer salas especiales por tipo (nuevo formato)
+      const limpiarSala = (v) => {
+        if (v == null) return null;
+        const s = String(v).trim();
+        return s ? s : null;
       };
 
-      // Parsear tipos de uso de la sala especial
-      let tiposConSalaEspecial = new Set();
-      if (salaEspecialNombre && typeof salaEspecialNombre === 'string' && salaEspecialNombre.trim() !== '') {
-        // Crear la sala en la tabla salas si no existe
+      const salaEspecialPorTipoHora = {
+        CLASE: limpiarSala(
+          buscarColumna(curso, "Sala especial CLAS", "Sala especial CLASE")
+        ),
+        AYUDANTIA: limpiarSala(
+          buscarColumna(curso, "Sala especial AYUD", "Sala especial AYUDANTIA")
+        ),
+        "LAB/TALLER": limpiarSala(
+          buscarColumna(curso, "Sala especial LAB", "Sala especial LAB/TALLER", "Sala especial TALLER")
+        ),
+      };
+
+      let salaEspecialPruebas = limpiarSala(
+        buscarColumna(curso, "Sala especial PRUEB", "Sala especial PRUEBA", "Sala especial PRUEBAS")
+      );
+      let salaEspecialExamen = limpiarSala(
+        buscarColumna(curso, "Sala especial EXAM", "Sala especial EXAMEN")
+      );
+
+      // Compatibilidad hacia atrás: formato antiguo Sala especial + USO
+      const salaEspecialLegacyNombre = limpiarSala(buscarColumna(curso, "Sala especial"));
+      const salaEspecialLegacyUso = buscarColumna(curso, "USO");
+
+      if (salaEspecialLegacyNombre && typeof salaEspecialLegacyUso === 'string' && salaEspecialLegacyUso.trim() !== '') {
+        const usoATipoHora = {
+          CLAS: 'CLASE',
+          AYUD: 'AYUDANTIA',
+          'LAB/TALLER': 'LAB/TALLER',
+        };
+
+        const usos = salaEspecialLegacyUso
+          .split(',')
+          .map((u) => u.trim().toUpperCase())
+          .filter(Boolean);
+
+        for (const uso of usos) {
+          const tipoHora = usoATipoHora[uso];
+          if (tipoHora && !salaEspecialPorTipoHora[tipoHora]) {
+            salaEspecialPorTipoHora[tipoHora] = salaEspecialLegacyNombre;
+          }
+        }
+
+        if (!salaEspecialPruebas) salaEspecialPruebas = salaEspecialLegacyNombre;
+        if (!salaEspecialExamen) salaEspecialExamen = salaEspecialLegacyNombre;
+      }
+
+      // Registrar todas las salas especiales detectadas
+      const salasEspeciales = new Set([
+        salaEspecialPorTipoHora.CLASE,
+        salaEspecialPorTipoHora.AYUDANTIA,
+        salaEspecialPorTipoHora['LAB/TALLER'],
+        salaEspecialPruebas,
+        salaEspecialExamen,
+      ].filter(Boolean));
+
+      for (const sala of salasEspeciales) {
         await pool.query(
           `INSERT INTO salas (nombre, es_especial) VALUES ($1, TRUE)
            ON CONFLICT (nombre) DO UPDATE SET es_especial = TRUE`,
-          [salaEspecialNombre.trim()]
+          [sala]
         );
+      }
 
-        if (salaEspecialUso && typeof salaEspecialUso === 'string' && salaEspecialUso.trim() !== '') {
-          const usos = salaEspecialUso.split(',').map(u => u.trim());
-          for (const uso of usos) {
-            const tipoHora = USO_A_TIPO_HORA[uso];
-            if (tipoHora) {
-              tiposConSalaEspecial.add(tipoHora);
-            }
-          }
-        }
-        console.log(`[SALA_ESP] ${codigo} Sec${seccion}: sala="${salaEspecialNombre}" tipos=[${[...tiposConSalaEspecial].join(',')}]`);
+      if (salasEspeciales.size > 0) {
+        console.log(
+          `[SALA_ESP] ${codigo} Sec${seccion}: CLASE=${salaEspecialPorTipoHora.CLASE || '-'} AYUD=${salaEspecialPorTipoHora.AYUDANTIA || '-'} LAB=${salaEspecialPorTipoHora['LAB/TALLER'] || '-'} PRUEB=${salaEspecialPruebas || '-'} EXAM=${salaEspecialExamen || '-'}`
+        );
       }
 
       // Extraer control de exámenes y cantidad de evaluaciones
@@ -317,7 +381,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           prof2?.id || null,
           titulo,
           disponibilidad,
-          tiposConSalaEspecial.has('CLASE') ? salaEspecialNombre.trim() : null
+          salaEspecialPorTipoHora.CLASE,
+          distribucionHorario
         );
         horariosCreados.push(horarioClase);
       }
@@ -337,7 +402,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           prof2?.id || null,
           titulo,
           disponibilidad,
-          tiposConSalaEspecial.has('AYUDANTIA') ? salaEspecialNombre.trim() : null
+          salaEspecialPorTipoHora.AYUDANTIA,
+          distribucionHorario
         );
         horariosCreados.push(horarioAyudantia);
       }
@@ -360,7 +426,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           null,
           titulo,
           disponibilidad,
-          tiposConSalaEspecial.has('LAB/TALLER') ? salaEspecialNombre.trim() : null
+          salaEspecialPorTipoHora['LAB/TALLER'],
+          distribucionHorario
         );
         horariosCreados.push(horarioLab);
       }
@@ -401,7 +468,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           titulo,
           BLOQUES_EXAMEN,
           tieneExamen,
-          cantidadEvaluaciones
+          cantidadEvaluaciones,
+          salaEspecialExamen || salaEspecialPruebas
         );
       }
 
@@ -417,7 +485,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           titulo,
           BLOQUES_TARDE,
           tieneExamen,
-          cantidadEvaluaciones
+          cantidadEvaluaciones,
+          salaEspecialPruebas || salaEspecialExamen
         );
       }
     }
@@ -453,7 +522,8 @@ async function crearHorarioProgramable(
   profesor2Id,
   titulo,
   disponibilidad = {},
-  salaEspecial = null
+  salaEspecial = null,
+  distribucionHorario = null
 ) {
   try {
     console.log(`[HP] Creando/actualizando ${codigo}-${seccion}-${tipoHora}: prof1_id=${profesor1Id} prof2_id=${profesor2Id}`);
@@ -470,8 +540,8 @@ async function crearHorarioProgramable(
       const result = await pool.query(
         `UPDATE horas_programables 
          SET cantidad_horas = $1, profesor_1_id = $2, profesor_2_id = $3, 
-             especialidades_semestres = $4, titulo = $5, disponibilidad = $6, sala_especial = $7, updated_at = NOW()
-         WHERE id = $8
+             especialidades_semestres = $4, titulo = $5, disponibilidad = $6, sala_especial = $7, distribucion_horario = $8, updated_at = NOW()
+         WHERE id = $9
          RETURNING *`,
         [
           cantidadHoras,
@@ -481,6 +551,7 @@ async function crearHorarioProgramable(
           titulo,
           JSON.stringify(disponibilidad),
           salaEspecial,
+          distribucionHorario,
           existente.rows[0].id,
         ]
       );
@@ -491,8 +562,8 @@ async function crearHorarioProgramable(
     // Crear nuevo registro usando ON CONFLICT para manejar duplicados
     const result = await pool.query(
       `INSERT INTO horas_programables 
-       (codigo, seccion, tipo_hora, cantidad_horas, profesor_1_id, profesor_2_id, especialidades_semestres, titulo, disponibilidad, sala_especial)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (codigo, seccion, tipo_hora, cantidad_horas, profesor_1_id, profesor_2_id, especialidades_semestres, titulo, disponibilidad, sala_especial, distribucion_horario)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (codigo, seccion, tipo_hora) 
        DO UPDATE SET 
          cantidad_horas = $4,
@@ -502,6 +573,7 @@ async function crearHorarioProgramable(
          titulo = $8,
          disponibilidad = $9,
          sala_especial = $10,
+         distribucion_horario = $11,
          updated_at = NOW()
        RETURNING *`,
       [
@@ -515,6 +587,7 @@ async function crearHorarioProgramable(
         titulo,
         JSON.stringify(disponibilidad),
         salaEspecial,
+        distribucionHorario,
       ]
     );
 
@@ -612,7 +685,8 @@ async function crearPruebaProgramable(
   titulo,
   bloquesHorario = [],
   tieneExamen = true,
-  cantidadEvaluaciones = null
+  cantidadEvaluaciones = null,
+  salaEspecial = null
 ) {
   try {
     // Verificar si ya existe (por combinación de codigo, seccion, tipo_prueba)
@@ -631,8 +705,8 @@ async function crearPruebaProgramable(
         `UPDATE pruebas_programables 
          SET profesor_1_id = $1, profesor_2_id = $2, 
              especialidades_semestres = $3, titulo = $4, bloques_horario = $5,
-             tiene_examen = $6, cantidad_evaluaciones = $7, updated_at = NOW()
-         WHERE id = $8
+             tiene_examen = $6, cantidad_evaluaciones = $7, sala_especial = $8, updated_at = NOW()
+         WHERE id = $9
          RETURNING *`,
         [
           profesor1Id,
@@ -642,6 +716,7 @@ async function crearPruebaProgramable(
           JSON.stringify(bloquesHorario),
           tieneExamen,
           cantidadEvaluaciones,
+          salaEspecial,
           existente.rows[0].id,
         ]
       );
@@ -651,8 +726,8 @@ async function crearPruebaProgramable(
     // Crear nuevo registro usando ON CONFLICT para manejar duplicados
     const result = await pool.query(
       `INSERT INTO pruebas_programables 
-       (codigo, seccion, tipo_prueba, profesor_1_id, profesor_2_id, especialidades_semestres, titulo, bloques_horario, tiene_examen, cantidad_evaluaciones)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (codigo, seccion, tipo_prueba, profesor_1_id, profesor_2_id, especialidades_semestres, titulo, bloques_horario, tiene_examen, cantidad_evaluaciones, sala_especial)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (codigo, seccion, tipo_prueba) 
        DO UPDATE SET 
          profesor_1_id = $4,
@@ -662,6 +737,7 @@ async function crearPruebaProgramable(
          bloques_horario = $8,
          tiene_examen = $9,
          cantidad_evaluaciones = $10,
+         sala_especial = $11,
          updated_at = NOW()
        RETURNING *`,
       [
@@ -675,6 +751,7 @@ async function crearPruebaProgramable(
         JSON.stringify(bloquesHorario),
         tieneExamen,
         cantidadEvaluaciones,
+        salaEspecial,
       ]
     );
 
@@ -851,12 +928,18 @@ export async function actualizarCalendarioPruebas(dashboardId) {
 
       // Obtener tiene_examen y cantidad_evaluaciones del curso (desde EXAMEN/TARDE existente)
       const metaResult = await pool.query(
-        `SELECT tiene_examen, cantidad_evaluaciones FROM pruebas_programables 
-         WHERE codigo = $1 AND seccion = $2 AND tipo_prueba IN ('EXAMEN', 'TARDE') LIMIT 1`,
+        `SELECT
+           MAX(tiene_examen::int)::boolean as tiene_examen,
+           MAX(cantidad_evaluaciones) as cantidad_evaluaciones,
+           MAX(CASE WHEN tipo_prueba = 'TARDE' THEN sala_especial END) as sala_pruebas,
+           MAX(CASE WHEN tipo_prueba = 'EXAMEN' THEN sala_especial END) as sala_examen
+         FROM pruebas_programables 
+         WHERE codigo = $1 AND seccion = $2 AND tipo_prueba IN ('EXAMEN', 'TARDE')`,
         [grupo.codigo, grupo.seccion]
       );
-      const tieneExamen = metaResult.rows.length > 0 ? metaResult.rows[0].tiene_examen : true;
-      const cantidadEvaluaciones = metaResult.rows.length > 0 ? metaResult.rows[0].cantidad_evaluaciones : null;
+      const tieneExamen = metaResult.rows[0]?.tiene_examen ?? true;
+      const cantidadEvaluaciones = metaResult.rows[0]?.cantidad_evaluaciones ?? null;
+      const salaEspecialPruebas = metaResult.rows[0]?.sala_pruebas || metaResult.rows[0]?.sala_examen || null;
 
       // Saltar si no tiene cantidad de evaluaciones válida (>= 1)
       if (!cantidadEvaluaciones || cantidadEvaluaciones < 1) {
@@ -875,7 +958,8 @@ export async function actualizarCalendarioPruebas(dashboardId) {
         grupo.titulo,
         bloques,
         tieneExamen,
-        cantidadEvaluaciones
+        cantidadEvaluaciones,
+        salaEspecialPruebas
       );
 
       pruebasCreadas.push(prueba);
