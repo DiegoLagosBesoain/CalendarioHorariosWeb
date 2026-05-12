@@ -309,7 +309,7 @@ async function validarDobleAsignacionProfesor(horaProgramableId, dashboardId, di
   try {
     // Obtener los profesores del hora_programable que se quiere registrar
     const progResult = await pool.query(
-      `SELECT hp.profesor_1_id, hp.profesor_2_id, hp.codigo, hp.seccion, hp.titulo,
+      `SELECT hp.profesor_1_id, hp.profesor_2_id, hp.codigo, hp.seccion, hp.titulo, hp.tipo_hora,
               p1.nombre as prof1_nombre, p2.nombre as prof2_nombre
        FROM horas_programables hp
        LEFT JOIN profesores p1 ON hp.profesor_1_id = p1.id
@@ -322,7 +322,20 @@ async function validarDobleAsignacionProfesor(horaProgramableId, dashboardId, di
       return { isValid: true };
     }
 
-    const { profesor_1_id, profesor_2_id, codigo, seccion, titulo, prof1_nombre, prof2_nombre } = progResult.rows[0];
+    const {
+      profesor_1_id,
+      profesor_2_id,
+      codigo,
+      seccion,
+      titulo,
+      tipo_hora,
+      prof1_nombre,
+      prof2_nombre
+    } = progResult.rows[0];
+
+    if (tipo_hora === 'AYUDANTIA') {
+      return { isValid: true };
+    }
 
     // Si no hay profesores asignados, no hay nada que validar
     if (!profesor_1_id && !profesor_2_id) {
