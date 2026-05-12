@@ -304,7 +304,11 @@ function extraerSemestres(especialidades_semestres) {
  */
 function tieneConflictoDisponibilidad(hora) {
   try {
-    const { disponibilidad, dia_semana, hora_inicio, profesor_1_id, profesor_2_id } = hora;
+    const { disponibilidad, dia_semana, hora_inicio, profesor_1_id, profesor_2_id, tipo_hora } = hora;
+
+    if (tipo_hora === 'AYUDANTIA') {
+      return false;
+    }
 
     if (!profesor_1_id && !profesor_2_id) {
       return false;
