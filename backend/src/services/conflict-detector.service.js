@@ -172,6 +172,10 @@ async function reevaluarConflictosDashboard(dashboardId) {
             continue;
           }
 
+          if (hora1.tipo_hora === 'AYUDANTIA' || hora2.tipo_hora === 'AYUDANTIA') {
+            continue;
+          }
+
           const profs1 = profesoresPorHora[idx1];
           const profs2 = profesoresPorHora[idx2];
 
@@ -304,7 +308,15 @@ function extraerSemestres(especialidades_semestres) {
  */
 function tieneConflictoDisponibilidad(hora) {
   try {
-    const { disponibilidad, dia_semana, hora_inicio } = hora;
+    const { disponibilidad, dia_semana, hora_inicio, profesor_1_id, profesor_2_id, tipo_hora } = hora;
+
+    if (tipo_hora === 'AYUDANTIA') {
+      return false;
+    }
+
+    if (!profesor_1_id && !profesor_2_id) {
+      return false;
+    }
 
     if (!disponibilidad || Object.keys(disponibilidad).length === 0) {
       return false; // Sin disponibilidad registrada, no hay conflicto
