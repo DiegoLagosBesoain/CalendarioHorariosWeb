@@ -211,6 +211,7 @@ async function validarDisponibilidadProfesor(horaProgramableId, dia, horaInicio)
   try {
     const result = await pool.query(
       `SELECT hp.disponibilidad, hp.codigo, hp.seccion, hp.titulo,
+              hp.profesor_1_id, hp.profesor_2_id,
               p1.nombre as prof1_nombre, p2.nombre as prof2_nombre
        FROM horas_programables hp
        LEFT JOIN profesores p1 ON hp.profesor_1_id = p1.id
@@ -223,7 +224,20 @@ async function validarDisponibilidadProfesor(horaProgramableId, dia, horaInicio)
       return { isValid: true };
     }
 
-    const { disponibilidad, codigo, seccion, titulo, prof1_nombre, prof2_nombre } = result.rows[0];
+    const {
+      disponibilidad,
+      codigo,
+      seccion,
+      titulo,
+      profesor_1_id,
+      profesor_2_id,
+      prof1_nombre,
+      prof2_nombre
+    } = result.rows[0];
+
+    if (!profesor_1_id && !profesor_2_id) {
+      return { isValid: true };
+    }
 
     // Si no hay disponibilidad registrada, permitir
     if (!disponibilidad || Object.keys(disponibilidad).length === 0) {
