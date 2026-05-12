@@ -172,6 +172,10 @@ async function reevaluarConflictosDashboard(dashboardId) {
             continue;
           }
 
+          if (hora1.tipo_hora === 'AYUDANTIA' || hora2.tipo_hora === 'AYUDANTIA') {
+            continue;
+          }
+
           const profs1 = profesoresPorHora[idx1];
           const profs2 = profesoresPorHora[idx2];
 

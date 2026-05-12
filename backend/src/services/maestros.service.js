@@ -215,8 +215,6 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
         return undefined;
       };
 
-      const tieneClases = curso["Clases A PROGRAMAR"] && curso["Clases A PROGRAMAR"] > 0;
-
       // Obtener o crear profesores (búsqueda flexible de columnas)
       const profesor1RUT = buscarColumna(curso, "RUT PROFESOR 1");
       // El nombre puede estar en la columna BANNER o en la columna normal
@@ -243,17 +241,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           "NOMBRE PROFESOR 2 (2DO PROFESOR - SESIÓN 02)"
         )
       );
-      const profesorLabRUTLabt = buscarColumna(curso, "RUT PROFESOR LABT");
-      const profesorLabRUTLegacy = buscarColumna(curso, "RUT PROFESOR LAB");
-      const profesorLabNombreLabt = buscarColumna(curso, "PROFESOR LABT ", "PROFESOR LABT");
-      const profesorLabNombreLegacy = buscarColumna(curso, "PROFESOR LAB");
-
-      const profesorLabRUT = tieneClases
-        ? profesorLabRUTLabt
-        : primerValorNoVacio(profesorLabRUTLabt, profesorLabRUTLegacy);
-      const profesorLabNombre = tieneClases
-        ? profesorLabNombreLabt
-        : primerValorNoVacio(profesorLabNombreLabt, profesorLabNombreLegacy);
+      const profesorLabRUT = buscarColumna(curso, "RUT PROFESOR LABT");
+      const profesorLabNombre = buscarColumna(curso, "PROFESOR LABT ", "PROFESOR LABT");
 
       // Debug: mostrar columnas de profesores del primer curso para verificar match
       if (cursosMandantes.indexOf(curso) === 0) {
@@ -409,8 +398,8 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
           "AYUDANTIA",
           curso["Ayudantías PROGRAMAR"],
           especialidades,
-          prof1?.id || null,
-          prof2?.id || null,
+          null,
+          null,
           titulo,
           disponibilidad,
           salaEspecialPorTipoHora.AYUDANTIA,
@@ -420,19 +409,17 @@ export async function procesarMaestrosYCrearHorarios(maestrosData) {
       }
 
       // Crear entrada para LABORATORIOS/TALLERES si existe
-      // Si la fila NO tiene clases, asignar prof1 al lab; si tiene clases, usar profLab
       if (
         curso["Laboratorios o Talleres PROGRAMAR"] &&
         curso["Laboratorios o Talleres PROGRAMAR"] > 0
       ) {
-        const labProf1 = tieneClases ? (profLab?.id || null) : (prof1?.id || null);
         const horarioLab = await crearHorarioProgramable(
           codigo,
           seccion,
           "LAB/TALLER",
           curso["Laboratorios o Talleres PROGRAMAR"],
           especialidades,
-          labProf1,
+          profLab?.id || null,
           null,
           titulo,
           disponibilidad,
