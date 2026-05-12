@@ -210,7 +210,7 @@ function normalizarHora(hora) {
 async function validarDisponibilidadProfesor(horaProgramableId, dia, horaInicio) {
   try {
     const result = await pool.query(
-      `SELECT hp.disponibilidad, hp.codigo, hp.seccion, hp.titulo,
+      `SELECT hp.disponibilidad, hp.codigo, hp.seccion, hp.titulo, hp.tipo_hora,
               hp.profesor_1_id, hp.profesor_2_id,
               p1.nombre as prof1_nombre, p2.nombre as prof2_nombre
        FROM horas_programables hp
@@ -229,11 +229,16 @@ async function validarDisponibilidadProfesor(horaProgramableId, dia, horaInicio)
       codigo,
       seccion,
       titulo,
+      tipo_hora,
       profesor_1_id,
       profesor_2_id,
       prof1_nombre,
       prof2_nombre
     } = result.rows[0];
+
+    if (tipo_hora === 'AYUDANTIA') {
+      return { isValid: true };
+    }
 
     if (!profesor_1_id && !profesor_2_id) {
       return { isValid: true };
