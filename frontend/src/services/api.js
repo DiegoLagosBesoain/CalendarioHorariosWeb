@@ -310,11 +310,10 @@ export const pruebasRegistradasService = {
     return res.json();
   },
 
-  async enviarPruebasAGoogleSheets(dashboardId, diccionario) {
+  async enviarPruebasAGoogleSheets(dashboardId) {
     const res = await fetch(`${API_URL}/pruebas-registradas/enviar-sheets/${dashboardId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ diccionario })
+      headers: { 'Content-Type': 'application/json' }
     });
     if (!res.ok) {
       const err = await res.json();

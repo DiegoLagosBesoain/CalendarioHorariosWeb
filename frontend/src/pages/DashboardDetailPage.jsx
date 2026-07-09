@@ -243,48 +243,10 @@ export function DashboardDetailPage() {
   };
 
   const handleEnviarPruebas = async () => {
-    const diccionario = {};
-
-    const ABREV_TIPO = {
-      'CLASE': 'CLAS',
-      'AYUDANTIA': 'AYUD',
-      'EXAMEN': 'EXAM',
-      'TARDE': 'TARDE',
-      'LAB/TALLER': 'LAB/TALLER'
-    };
-
-    for (const prueba of pruebasRegistradas) {
-      const tipo = (prueba.tipo_prueba || '').toUpperCase();
-
-      const clave = `${prueba.codigo}${prueba.seccion}`;
-      if (!diccionario[clave]) {
-        diccionario[clave] = [];
-      }
-
-      const formatTime = (t) => {
-        if (!t) return null;
-        const s = String(t).substring(0, 5);
-        const [h, m] = s.split(':');
-        return `${parseInt(h)}:${m}`;
-      };
-
-      const horaInicio = formatTime(prueba.hora_inicio);
-      const horaFin = formatTime(prueba.hora_fin);
-      const horario = horaInicio && horaFin ? `${horaInicio}-${horaFin}` : null;
-
-      diccionario[clave].push({
-        fecha: new Date(prueba.fecha).toISOString().split('T')[0],
-        horario,
-        tipo: ABREV_TIPO[tipo] || tipo
-      });
-    }
-
-    console.log('JSON Pruebas para enviar:', JSON.stringify(diccionario, null, 2));
-
     try {
       setCargandoDatos(true);
       setError('');
-      const resultado = await pruebasRegistradasService.enviarPruebasAGoogleSheets(dashboardId, diccionario);
+      const resultado = await pruebasRegistradasService.enviarPruebasAGoogleSheets(dashboardId);
       console.log('Respuesta de Google Sheets (pruebas):', resultado);
       alert('Pruebas enviadas correctamente a Google Sheets');
     } catch (err) {

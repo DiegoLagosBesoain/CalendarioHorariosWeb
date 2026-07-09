@@ -196,12 +196,8 @@ router.delete('/dashboard/:dashboardId', async (req, res) => {
 router.post('/enviar-sheets/:dashboardId', async (req, res) => {
   try {
     const { dashboardId } = req.params;
-    const { diccionario } = req.body;
 
-    if (!diccionario || typeof diccionario !== 'object') {
-      return res.status(400).json({ error: 'Se requiere el diccionario de pruebas' });
-    }
-
+    const diccionario = await pruebasRegistradasService.armarDiccionarioPruebasParaGoogleSheets(dashboardId);
     const resultado = await appScriptService.enviarPruebasASheets(diccionario);
 
     res.json({

@@ -210,6 +210,55 @@ async function obtenerPorRangoFechas(dashboardId, fechaInicio, fechaFin) {
   return result.rows;
 }
 
+/**
+ * Armar diccionario de pruebas para enviar a Google Sheets
+ * Estructura: { "CodigoSeccion": [{ fecha, horario, tipo }, ...], ... }
+ */
+async function armarDiccionarioPruebasParaGoogleSheets(dashboardId) {
+  const pruebas = await obtenerPorDashboard(dashboardId);
+  const diccionario = {};
+
+  const ABREV_TIPO = {
+    'CLASE': 'CLAS',
+    'AYUDANTIA': 'AYUD',
+    'EXAMEN': 'EXAM',
+    'TARDE': 'TARDE',
+    'LAB/TALLER': 'LAB/TALLER'
+  };
+
+  for (const prueba of pruebas) {
+    const clave = `${prueba.codigo}${prueba.seccion}`;
+    if (!diccionario[clave]) {
+      diccionario[clave] = [];
+    }
+
+    const tipo = (prueba.tipo_prueba || '').toUpperCase();
+    const tipoAbrev = ABREV_TIPO[tipo] || tipo;
+
+    const formatTime = (t) => {
+      if (!t) return null;
+      const s = String(t).substring(0, 5);
+      const [h, m] = s.split(':');
+      return `${parseInt(h)}:${m}`;
+    };
+
+    const horaInicio = formatTime(prueba.hora_inicio);
+    const horaFin = formatTime(prueba.hora_fin);
+    const horario = horaInicio && horaFin ? `${horaInicio}-${horaFin}` : null;
+
+    const fecha = new Date(prueba.fecha);
+    const fechaStr = fecha.toISOString().split('T')[0];
+
+    diccionario[clave].push({
+      fecha: fechaStr,
+      horario,
+      tipo: tipoAbrev
+    });
+  }
+
+  return diccionario;
+}
+
 export { 
   crear, 
   obtenerPorDashboard, 
@@ -219,5 +268,6 @@ export {
   guardarConflictos, 
   limpiarConflictos, 
   limpiarDashboard,
-  obtenerPorRangoFechas
+  obtenerPorRangoFechas,
+  armarDiccionarioPruebasParaGoogleSheets
 };
