@@ -125,7 +125,7 @@ async function validarToquesDeSemestre(horaProgramableId, dashboardId, horario, 
 /**
  * Validador 2: Detectar horarios protegidos
  * Verifica si el horario se está programando en franjas horarias protegidas
- * Solo aplica para 'plan_comun' y '5to_6to'
+ * Solo aplica para 'plan_comun', '5to_6to' y '7mo_8vo'
  * Horarios protegidos:
  * - Martes: 17:30-18:20, 18:30-19:20
  * - Miércoles: 17:30-18:20, 18:30-19:20
@@ -133,8 +133,8 @@ async function validarToquesDeSemestre(horaProgramableId, dashboardId, horario, 
  */
 function validarHorarioProtegido(dia, horaInicio, tipoHorario) {
   try {
-    // Solo aplicar validación para plan_comun y 5to_6to
-    const tiposAplicables = ['plan_comun', '5to_6to'];
+    // Solo aplicar validación para plan_comun, 5to_6to y 7mo_8vo
+    const tiposAplicables = ['plan_comun', '5to_6to', '7mo_8vo'];
     if (!tiposAplicables.includes(tipoHorario)) {
       return { isValid: true };
     }
@@ -161,7 +161,7 @@ function validarHorarioProtegido(dia, horaInicio, tipoHorario) {
     const horasProhibidas = horariosProtegidos[diaNumeroPorNombre] || [];
 
     if (horasProhibidas.includes(horaInicio)) {
-      const nombreTipoHorario = tipoHorario === 'plan_comun' ? 'Plan Común' : '5to y 6to';
+      const nombreTipoHorario = tipoHorario === 'plan_comun' ? 'Plan Común' : tipoHorario === '5to_6to' ? '5to y 6to' : '7mo y 8vo';
       return {
         isValid: true, // No bloquea, solo advierte
         warning: `🔒 Horario Protegido: Esta programación se encuentra en una franja protegida de ${nombreTipoHorario}. ${dia} a las ${horaInicio}.`

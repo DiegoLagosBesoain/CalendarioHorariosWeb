@@ -2,20 +2,19 @@ import { useState, useMemo } from 'react';
 import { HORARIOS } from '../constants/horarios';
 import { pruebasRegistradasService } from '../services/api';
 import { getPostitStyle } from '../utils/colorUtils';
+import { filterForSemester } from '../utils/filtros';
 import { PruebasSidebar } from './PruebasSidebar';
 import '../styles/CalendarView.css';
 
 export function CalendarView({ 
   fechaInicio, 
   fechaFin, 
-  horasRegistradas = [], 
-  horariosProgramables = [],
   pruebasRegistradas = [],
   pruebasProgramables = [],
   dashboardId,
   onPruebasChanged = () => {},
   filtroEspecialidad = 'TODOS',
-  filtroSemestre = 'TODOS',
+  filtroSemestre = [],
   onFiltroEspecialidadChange = () => {},
   onFiltroSemestreChange = () => {},
   filtrarPrueba = () => true,
@@ -25,7 +24,26 @@ export function CalendarView({
   const [modoVisualizacion, setModoVisualizacion] = useState('cascada');
   const [semestreActual, setSemestreActual] = useState(0);
 
-  // Si no hay fechas de rango, mostrar mensaje
+  const fechaInicioDate = useMemo(() => fechaInicio ? new Date(fechaInicio) : null, [fechaInicio]);
+  const fechaFinDate = useMemo(() => fechaFin ? new Date(fechaFin) : null, [fechaFin]);
+
+  const [fechaActual, setFechaActual] = useState(() => fechaInicio ? new Date(fechaInicio) : new Date());
+
+  // Generar array de todos los meses en el rango
+  const todosLosMeses = useMemo(() => {
+    if (!fechaInicioDate || !fechaFinDate) return [];
+    const meses = [];
+    const inicio = new Date(fechaInicioDate.getFullYear(), fechaInicioDate.getMonth(), 1);
+    const fin = new Date(fechaFinDate.getFullYear(), fechaFinDate.getMonth(), 1);
+    let iter = new Date(inicio);
+    while (iter <= fin) {
+      meses.push(new Date(iter));
+      iter = new Date(iter.getFullYear(), iter.getMonth() + 1, 1);
+    }
+    return meses;
+  }, [fechaInicioDate, fechaFinDate]);
+
+  // Si no hay fechas de rango, mostrar mensaje (después de todos los hooks)
   if (!fechaInicio || !fechaFin) {
     return (
       <div className="calendar-container">
@@ -39,15 +57,11 @@ export function CalendarView({
     );
   }
 
-  const fechaInicioDate = new Date(fechaInicio);
-  const fechaFinDate = new Date(fechaFin);
-  
-  const [fechaActual, setFechaActual] = useState(new Date(fechaInicio));
-
-  // Generar array de días del mes actual
-  const diasDelMes = useMemo(() => {
-    const year = fechaActual.getFullYear();
-    const month = fechaActual.getMonth();
+  // Generar array de días del mes
+  const getDiasDelMes = (fecha) => {
+    if (!fecha) return [];
+    const year = fecha.getFullYear();
+    const month = fecha.getMonth();
     const primerDia = new Date(year, month, 1);
     const ultimoDia = new Date(year, month + 1, 0);
     const diasEnMes = ultimoDia.getDate();
@@ -56,15 +70,22 @@ export function CalendarView({
     for (let i = 0; i < primerDiaDelMes; i++) dias.push(null);
     for (let i = 1; i <= diasEnMes; i++) dias.push(new Date(year, month, i));
     return dias;
-  }, [fechaActual]);
+  };
 
   // Obtener pruebas registradas para un día específico
+  // Usar formato local "YYYY-MM-DD" para evitar timezone issues con toISOString()
+  const formatFechaLocal = (fecha) => {
+    if (!fecha) return '';
+    const d = new Date(fecha);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
   const getPruebasDelDia = (fecha) => {
     if (!fecha) return [];
-    const fechaStr = fecha.toISOString().split('T')[0];
+    const fechaStr = formatFechaLocal(fecha);
     return pruebasRegistradas.filter(p => {
       if (!p.fecha) return false;
-      const pruebaFechaStr = new Date(p.fecha).toISOString().split('T')[0];
+      const pruebaFechaStr = formatFechaLocal(p.fecha);
       return pruebaFechaStr === fechaStr;
     });
   };
@@ -123,46 +144,16 @@ export function CalendarView({
   const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
   // ── Filtro por semestre (misma lógica que TimeTable) ──
-  function filterForSemester(semestreId) {
+  function filterForSemesterLocal(semestreId) {
     return (p) => {
       if (!filtrarPrueba(p)) return false;
-      if (!p || !p.especialidades_semestres) return false;
-      let esp = p.especialidades_semestres;
-      if (typeof esp === 'string') {
-        try { esp = JSON.parse(esp); } catch(err) { return false; }
-      }
-      if (Array.isArray(esp)) {
-        if (semestreId === 'plan_comun') {
-          return esp.some(e => 
-            e.nombre === 'Plan Común' || 
-            (e.nombre && e.nombre.toLowerCase && e.nombre.toLowerCase() === 'plan común')
-          );
-        }
-        const targets = {
-          '5to_6to': [5, 6],
-          '7mo_8vo': [7, 8],
-          '9no_10_11': [9, 10, 11]
-        }[semestreId];
-        if (!targets) return false;
-        return esp.some(e => targets.includes(Number(e.semestre)));
-      }
-      if (typeof esp === 'object') {
-        if (semestreId === 'plan_comun') {
-          return Object.prototype.hasOwnProperty.call(esp, 'Plan Común') && esp['Plan Común'];
-        }
-        const targets = {
-          '5to_6to': [5, 6],
-          '7mo_8vo': [7, 8],
-          '9no_10_11': [9, 10, 11]
-        }[semestreId];
-        if (!targets) return false;
-        return Object.values(esp).some(v => targets.includes(Number(v)));
-      }
-      return false;
+      return filterForSemester(p, semestreId);
     };
   }
 
   // ── Detección de día no coincidente (frontend) ──
+  // NOTA: Usar getUTCDay() para evitar timezone issues. PostgreSQL almacena DATE como "YYYY-MM-DD"
+  // sin timezone. new Date("2024-03-15") en Chile (UTC-3) da el día ANTERIOR si usamos getDay().
   const getDayMismatchWarning = (prueba) => {
     const prog = getPruebaProgramable(prueba.prueba_programable_id);
     if (!prog) return null;
@@ -172,13 +163,14 @@ export function CalendarView({
     let bloques = prog.bloques_horario;
     if (!bloques) return null;
     if (typeof bloques === 'string') {
-      try { bloques = JSON.parse(bloques); } catch(e) { return null; }
+      try { bloques = JSON.parse(bloques); } catch { return null; }
     }
     if (!Array.isArray(bloques) || bloques.length === 0) return null;
 
     const diasSemanaFull = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     const fechaPrueba = new Date(prueba.fecha);
-    const diaPrueba = diasSemanaFull[fechaPrueba.getDay()];
+    // Usar getUTCDay() para evitar timezone (la fecha viene como "YYYY-MM-DD" desde PostgreSQL)
+    const diaPrueba = diasSemanaFull[fechaPrueba.getUTCDay()];
 
     // Normalizar hora
     const norm = (h) => {
@@ -224,9 +216,11 @@ export function CalendarView({
     return `${parseInt(h)}:${m}`;
   };
 
-  // ── Render del calendario para un semestre ──
-  const renderCalendar = (semestre) => {
-    const semestreFilter = filterForSemester(semestre.id);
+  // ── Render del calendario para un semestre y mes ──
+  const renderCalendar = (semestre, monthDate = null) => {
+    const semestreFilter = filterForSemesterLocal(semestre.id);
+    const targetMonth = monthDate || fechaActual;
+    const diasDelMes = getDiasDelMes(targetMonth);
 
     return (
       <div className="calendar-view">
@@ -262,7 +256,7 @@ export function CalendarView({
               );
               const estaEnRango = fecha >= fechaInicioDate && fecha <= fechaFinDate;
               const estaFueraDeRango = !estaEnRango;
-              const fechaStr = fecha.toISOString().split('T')[0];
+              const fechaStr = formatFechaLocal(fecha);
               const esFeriado = feriados.includes(fechaStr);
 
               return (
@@ -289,19 +283,22 @@ export function CalendarView({
                     
                     if (!data) return;
                     
-                    // Si es una prueba desde el sidebar
-                    if (data.source === 'sidebar' && data.prueba) {
-                      const prueba = data.prueba;
-                      const fechaStr = fecha.toISOString().split('T')[0];
+                    const ids = data.ids || (data.prueba ? [String(data.prueba.id)] : null);
+                    
+                    // Si es una prueba desde el sidebar (individual o grupo)
+                    if (data.source === 'sidebar' && ids) {
+                      const fechaStr = formatFechaLocal(fecha);
                       
                       try {
-                        await pruebasRegistradasService.crear(
-                          prueba.id,
-                          dashboardId,
-                          fechaStr,
-                          data.horaInicio || null,
-                          data.horaFin || null
-                        );
+                        await Promise.all(ids.map(id =>
+                          pruebasRegistradasService.crear(
+                            id,
+                            dashboardId,
+                            fechaStr,
+                            data.horaInicio || null,
+                            data.horaFin || null
+                          )
+                        ));
                         onPruebasChanged();
                       } catch (err) {
                         console.error('Error creando prueba:', err);
@@ -311,7 +308,7 @@ export function CalendarView({
                     
                     // Si es una prueba moviéndose entre celdas
                     if (data.type === 'prueba-registrada') {
-                      const fechaStr = fecha.toISOString().split('T')[0];
+                      const fechaStr = formatFechaLocal(fecha);
                       
                       try {
                         await pruebasRegistradasService.actualizar(
@@ -353,6 +350,7 @@ export function CalendarView({
                         const prog = getPruebaProgramable(prueba.prueba_programable_id);
                         const tieneConflicto = Array.isArray(prueba.conflictos) && prueba.conflictos.length > 0;
                         const hasDayMismatch = Array.isArray(prueba.conflictos) && prueba.conflictos.includes(-2);
+                        const hasProtectedSchedule = Array.isArray(prueba.conflictos) && prueba.conflictos.includes(-1);
                         const dayMismatchMsg = getDayMismatchWarning(prueba);
                         const colorStyle = prog 
                           ? getPostitStyle(prog.especialidades_semestres, tieneConflicto)
@@ -370,7 +368,7 @@ export function CalendarView({
                         return (
                           <div 
                             key={prueba.id} 
-                            className={`prueba-tag ${tieneConflicto ? 'conflicting' : ''} ${hasDayMismatch ? 'day-mismatch' : ''} tipo-${prog?.tipo_prueba?.toLowerCase().replace('/', '-')}`}
+                            className={`prueba-tag ${tieneConflicto ? 'conflicting' : ''} ${hasDayMismatch ? 'day-mismatch' : ''} ${hasProtectedSchedule ? 'protected-schedule' : ''} tipo-${prog?.tipo_prueba?.toLowerCase().replace('/', '-')}`}
                             draggable={true}
                             style={colorStyle}
                             onDragStart={(e) => {
@@ -394,12 +392,14 @@ export function CalendarView({
                               {hasDayMismatch && (
                                 <span className="prueba-day-warning">📅 Día ≠ horario</span>
                               )}
+                              {hasProtectedSchedule && (
+                                <span className="prueba-protected-warning">🔒 Horario protegido</span>
+                              )}
                             </div>
                             <button
                               className="prueba-remove-btn"
                               onClick={async (e) => {
                                 e.stopPropagation();
-                                if (!window.confirm('¿Eliminar esta prueba?')) return;
                                 
                                 try {
                                   await pruebasRegistradasService.eliminar(prueba.id);
@@ -427,14 +427,14 @@ export function CalendarView({
   };
 
   // ── Render calendario + sidebar para un semestre ──
-  const renderCalendarWithSidebar = (semestre) => (
-    <div key={semestre.id} className="calendar-with-sidebar">
-      {renderCalendar(semestre)}
+  const renderCalendarWithSidebar = (semestre, monthDate = null) => (
+    <div key={`${semestre.id}-${monthDate ? monthDate.getTime() : ''}`} className="calendar-with-sidebar">
+      {renderCalendar(semestre, monthDate)}
       <div className="calendar-sidebar-container">
         <PruebasSidebar
           pruebas={pruebasProgramables}
           pruebasRegistradas={pruebasRegistradas}
-          filterFn={filterForSemester(semestre.id)}
+          filterFn={filterForSemesterLocal(semestre.id)}
           dashboardId={dashboardId}
           filtroEspecialidad={filtroEspecialidad}
           filtroSemestre={filtroSemestre}
@@ -447,20 +447,22 @@ export function CalendarView({
 
   return (
     <div className="calendar-container">
-      {/* Navegación mensual compartida */}
-      <div className="calendar-header">
-        <button onClick={mesAnterior} className="nav-btn" disabled={!puedeNavAnterior()}>← Anterior</button>
-        <div className="month-year">
-          <h2>{nombreMeses[fechaActual.getMonth()]} {fechaActual.getFullYear()}</h2>
-          {fechaInicio && fechaFin && (
-            <p className="date-range">
-              Rango: {new Date(fechaInicio).toLocaleDateString()} - {new Date(fechaFin).toLocaleDateString()}
-            </p>
-          )}
+      {/* Navegación mensual solo en modo paginado */}
+      {modoVisualizacion === 'paginado' && (
+        <div className="calendar-header">
+          <button onClick={mesAnterior} className="nav-btn" disabled={!puedeNavAnterior()}>← Anterior</button>
+          <div className="month-year">
+            <h2>{nombreMeses[fechaActual.getMonth()]} {fechaActual.getFullYear()}</h2>
+            {fechaInicio && fechaFin && (
+              <p className="date-range">
+                Rango: {new Date(fechaInicio).toLocaleDateString()} - {new Date(fechaFin).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+          <button onClick={mesSiguiente} className="nav-btn" disabled={!puedeNavSiguiente()}>Siguiente →</button>
+          <button onClick={hoy} className="today-btn" disabled={!puedeNavHoy()}>Hoy</button>
         </div>
-        <button onClick={mesSiguiente} className="nav-btn" disabled={!puedeNavSiguiente()}>Siguiente →</button>
-        <button onClick={hoy} className="today-btn" disabled={!puedeNavHoy()}>Hoy</button>
-      </div>
+      )}
 
       {/* Controles de vista */}
       <div className="calendar-controls">
@@ -501,7 +503,12 @@ export function CalendarView({
       {/* Grids del calendario */}
       {modoVisualizacion === 'cascada' ? (
         <div className="calendar-cascade">
-          {HORARIOS.semestres.map((semestre) => renderCalendarWithSidebar(semestre))}
+          {todosLosMeses.map((mes, mesIdx) => (
+            <div key={mesIdx} className="calendar-cascade-month">
+              <h3 className="calendar-month-title">{nombreMeses[mes.getMonth()]} {mes.getFullYear()}</h3>
+              {HORARIOS.semestres.map((semestre) => renderCalendarWithSidebar(semestre, mes))}
+            </div>
+          ))}
         </div>
       ) : (
         <div className="calendar-paginated">
@@ -521,6 +528,10 @@ export function CalendarView({
         <div className="legend-item">
           <div className="legend-color day-mismatch-legend"></div>
           <span>Día ≠ Horario</span>
+        </div>
+        <div className="legend-item">
+          <div className="legend-color protected-schedule-legend"></div>
+          <span>🔒 Horario Protegido</span>
         </div>
         <div className="legend-item">
           <div className="legend-color feriado-legend"></div>

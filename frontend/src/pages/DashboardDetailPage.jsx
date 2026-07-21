@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
   dashboardService, 
@@ -10,12 +10,13 @@ import {
 } from '../services/api';
 import { TimeTable } from '../components/TimeTable';
 import { CalendarView } from '../components/CalendarView';
+import { filtrarHorario } from '../utils/filtros';
 import '../styles/DashboardDetail.css';
 
 export function DashboardDetailPage() {
   const { dashboardId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const [dashboard, setDashboard] = useState(null);
   const [horasRegistradas, setHorasRegistradas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,19 +31,13 @@ export function DashboardDetailPage() {
   const [feriados, setFeriados] = useState([]);
   
   // Estados para filtros
-  const [filtroHorario, setFiltroHorario] = useState('plan_comun'); // plan_comun, 5to_6to, 7mo_mas
   const [filtroEspecialidad, setFiltroEspecialidad] = useState('TODOS'); // ICI, IOC, ICE, ICC, ICA, ICQ, TODOS
-  const [filtroSemestre, setFiltroSemestre] = useState('TODOS'); // 1-11, TODOS
+  const [filtroSemestre, setFiltroSemestre] = useState([]); // [] = todos, [1,2,3] = filtrados
   const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
-    loadDashboard();
-  }, [dashboardId]);
-
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
-      // Obtener información del dashboard usando el endpoint directo
       const found = await dashboardService.getDashboard(parseInt(dashboardId));
       
       if (!found) {
@@ -51,20 +46,22 @@ export function DashboardDetailPage() {
       }
       
       setDashboard(found);
-      // Parsear feriados del dashboard
       let feriadosList = found.feriados || [];
       if (typeof feriadosList === 'string') {
-        try { feriadosList = JSON.parse(feriadosList); } catch (e) { feriadosList = []; }
+        try { feriadosList = JSON.parse(feriadosList); } catch { feriadosList = []; }
       }
       setFeriados(feriadosList);
-      // TODO: Cargo de horas registradas cuando esté disponible
       setHorasRegistradas([]);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [dashboardId]);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [dashboardId, loadDashboard]);
 
   const handleCargarDatos = async () => {
     try {
@@ -140,85 +137,24 @@ export function DashboardDetailPage() {
     }
   };
 
-  const cargarPruebasRegistradas = async () => {
+  const cargarPruebasRegistradas = useCallback(async () => {
     try {
       const { pruebasRegistradas: prs } = await pruebasRegistradasService.obtenerPorDashboard(dashboardId);
       setPruebasRegistradas(prs || []);
     } catch (err) {
       console.error('Error cargando pruebas registradas:', err);
     }
-  };
+  }, [dashboardId]);
   
-  /**
-   * Función para filtrar horarios según especialidad y semestre
-   */
-  const filtrarHorario = (horario) => {
-    if (!horario.especialidades_semestres) return false;
-    
-    let esp = horario.especialidades_semestres;
-    if (typeof esp === 'string') {
-      try {
-        esp = JSON.parse(esp);
-      } catch (e) {
-        return false;
-      }
-    }
-    
-    // Si es "TODOS", mostrar todos los horarios
-    if (filtroEspecialidad === 'TODOS' && filtroSemestre === 'TODOS') {
-      return true;
-    }
-    
-    // Extraer las especialidades y semestres del horario
-    let especialidadesDelHorario = [];
-    
-    if (Array.isArray(esp)) {
-      especialidadesDelHorario = esp;
-    } else if (typeof esp === 'object') {
-      // Formato: {ICA: 9, IOC: 9} o {ICA: [9, 10]}
-      especialidadesDelHorario = Object.entries(esp).flatMap(([nombre, semestres]) => {
-        const sems = Array.isArray(semestres) ? semestres : [semestres];
-        return sems.map(sem => ({ nombre, semestre: sem }));
-      });
-    }
-    
-    // Filtrar según criterios
-    for (const item of especialidadesDelHorario) {
-      const nombreEsp = item.nombre || item;
-      const semestreNum = typeof item === 'object' ? item.semestre : item;
-      
-      // Limpiar semestre (remover letras)
-      let semestreLimpio = semestreNum;
-      if (typeof semestreNum === 'string') {
-        semestreLimpio = parseInt(semestreNum.replace(/[^0-9]/g, ''), 10);
-      }
-      if (typeof semestreLimpio === 'number') {
-        semestreLimpio = Math.floor(semestreLimpio);
-      }
-      
-      // Verificar si cumple con el filtro de especialidad
-      const cumpleEspecialidad = filtroEspecialidad === 'TODOS' || 
-        nombreEsp === filtroEspecialidad ||
-        nombreEsp === 'Plan Común' ||
-        nombreEsp === 'plan_comun';
-      
-      // Verificar si cumple con el filtro de semestre
-      const cumpleSemestre = filtroSemestre === 'TODOS' || 
-        semestreLimpio === parseInt(filtroSemestre);
-      
-      if (cumpleEspecialidad && cumpleSemestre) {
-        return true;
-      }
-    }
-    
-    return false;
-  };
-
   useEffect(() => {
     if (dashboardId) {
       cargarPruebasRegistradas();
     }
-  }, [dashboardId]);
+  }, [dashboardId, cargarPruebasRegistradas]);
+
+  const filtrarHorarioLocal = (horario) => {
+    return filtrarHorario(horario, filtroEspecialidad, filtroSemestre);
+  };
 
   const handleEnviarDatos = async () => {
     try {
@@ -469,7 +405,7 @@ export function DashboardDetailPage() {
               filtroSemestre={filtroSemestre}
               onFiltroEspecialidadChange={setFiltroEspecialidad}
               onFiltroSemestreChange={setFiltroSemestre}
-              filtrarHorario={filtrarHorario}
+              filtrarHorario={filtrarHorarioLocal}
               refreshKey={refreshKey}
             />
           </main>
@@ -488,14 +424,14 @@ export function DashboardDetailPage() {
               filtroSemestre={filtroSemestre}
               onFiltroEspecialidadChange={setFiltroEspecialidad}
               onFiltroSemestreChange={setFiltroSemestre}
-              filtrarPrueba={filtrarHorario}
+              filtrarPrueba={filtrarHorarioLocal}
               feriados={feriados}
               onToggleFeriado={async (fecha) => {
                 try {
                   const updated = await dashboardService.toggleFeriado(dashboardId, fecha);
                   let feriadosList = updated.feriados || [];
                   if (typeof feriadosList === 'string') {
-                    try { feriadosList = JSON.parse(feriadosList); } catch (e) { feriadosList = []; }
+        try { feriadosList = JSON.parse(feriadosList); } catch { feriadosList = []; }
                   }
                   setFeriados(feriadosList);
                 } catch (err) {

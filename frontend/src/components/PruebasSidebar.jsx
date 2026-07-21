@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { getPostitStyle } from '../utils/colorUtils';
 import '../styles/PruebasSidebar.css';
 
@@ -7,9 +7,8 @@ export function PruebasSidebar({
   pruebasRegistradas = [],
   filterFn = () => true,
   onDragStartPrueba = () => {},
-  dashboardId,
   filtroEspecialidad = 'TODOS',
-  filtroSemestre = 'TODOS',
+  filtroSemestre = [],
   onFiltroEspecialidadChange = () => {},
   onFiltroSemestreChange = () => {}
 }) {
@@ -20,14 +19,43 @@ export function PruebasSidebar({
     EXAMEN: [],
     TARDE: []
   });
-
-  // Track selected block index per prueba id
+  const [pruebasSeparadas, setPruebasSeparadas] = useState(new Set());
   const [selectedBlocks, setSelectedBlocks] = useState({});
 
   const pruebasMapRef = useRef(new Map());
 
+  // Agrupar pruebas por codigo
+  const agruparPruebas = useCallback((items) => {
+    const grupos = {};
+    items.forEach(p => {
+      if (!grupos[p.codigo]) grupos[p.codigo] = [];
+      grupos[p.codigo].push(p);
+    });
+    const resultado = [];
+    Object.entries(grupos).forEach(([codigo, secciones]) => {
+      if (pruebasSeparadas.has(codigo) || secciones.length === 1) {
+        secciones.forEach(s => resultado.push(s));
+      } else {
+        resultado.push({
+          id: `grupo_${codigo}`,
+          ids: secciones.map(s => String(s.id)),
+          codigo,
+          seccion: secciones.map(s => s.seccion).join(','),
+          titulo: secciones[0].titulo || 'Sin título',
+          tipo_prueba: secciones[0].tipo_prueba,
+          especialidades_semestres: secciones[0].especialidades_semestres,
+          bloques_horario: secciones[0].bloques_horario,
+          cantidad_evaluaciones: secciones[0].cantidad_evaluaciones,
+          tiene_examen: secciones[0].tiene_examen,
+          _esGrupo: true,
+          _secciones: secciones.map(s => s.seccion),
+        });
+      }
+    });
+    return resultado;
+  }, [pruebasSeparadas]);
+
   useEffect(() => {
-    // build map and initial grouping
     const map = new Map();
     pruebas.forEach((p) => map.set(String(p.id), p));
     pruebasMapRef.current = map;
@@ -42,38 +70,38 @@ export function PruebasSidebar({
     
     pruebas.filter(filterFn).forEach((p) => {
       const tipo = (p.tipo_prueba || '').toUpperCase();
-      // Filtrar EXAMEN si tiene_examen es false
-      if (tipo === 'EXAMEN' && p.tiene_examen === false) {
-        return;
-      }
+      if (tipo === 'EXAMEN' && p.tiene_examen === false) return;
       if (grouped[tipo]) {
         grouped[tipo].push(p);
       }
     });
 
-    setColumns(grouped);
-  }, [pruebas, filterFn]);
+    Object.keys(grouped).forEach(tipo => {
+      grouped[tipo] = agruparPruebas(grouped[tipo]);
+    });
 
-  // Drag state
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setColumns(grouped);
+  }, [pruebas, filterFn, agruparPruebas]);
+
   const dragDataRef = useRef(null);
 
-  function onDragStart(e, id, from) {
-    dragDataRef.current = { id: String(id), from, source: 'sidebar' };
+  function onDragStart(e, ids, from) {
+    const idArray = Array.isArray(ids) ? ids : [String(ids)];
+    const primeraId = idArray[0];
+    dragDataRef.current = { ids: idArray, from, source: 'sidebar' };
     
-    // Obtener la prueba del mapa
-    const prueba = pruebasMapRef.current.get(String(id));
+    const prueba = pruebasMapRef.current.get(primeraId);
     
-    // Obtener el bloque seleccionado para esta prueba
     const bloques = parseBloques(prueba?.bloques_horario);
-    const selectedIdx = selectedBlocks[String(id)] || 0;
+    const selectedIdx = selectedBlocks[primeraId] || 0;
     const selectedBlock = bloques.length > 0 ? bloques[selectedIdx] : null;
     
-    // Notificar al padre que se inició el drag
     onDragStartPrueba(prueba);
     
     try {
       e.dataTransfer.setData('application/json', JSON.stringify({ 
-        id: String(id), 
+        ids: idArray,
         from, 
         source: 'sidebar',
         prueba,
@@ -81,8 +109,8 @@ export function PruebasSidebar({
         horaFin: selectedBlock?.fin || null,
         bloqueDia: selectedBlock?.dia || null
       }));
-    } catch (err) {
-      e.dataTransfer.setData('text/plain', String(id));
+    } catch {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ ids: idArray, from, source: 'sidebar' }));
     }
     e.dataTransfer.effectAllowed = 'move';
   }
@@ -122,7 +150,7 @@ export function PruebasSidebar({
     e.preventDefault();
     const data = dragDataRef.current;
     if (!data || data.source !== 'sidebar') return;
-    moveItem(data.id, data.from, to, null);
+    moveItem(data.ids, data.from, to, null);
     dragDataRef.current = null;
   }
 
@@ -130,12 +158,11 @@ export function PruebasSidebar({
     e.preventDefault();
     const data = dragDataRef.current;
     if (!data || data.source !== 'sidebar') return;
-    moveItem(data.id, data.from, to, beforeId);
+    moveItem(data.ids, data.from, to, beforeId);
     dragDataRef.current = null;
   }
 
   function resetCols() {
-    // Force re-run of grouping
     setColumns((prev) => ({ 
       CLASE: [...prev.CLASE], 
       AYUDANTIA: [...prev.AYUDANTIA], 
@@ -145,17 +172,15 @@ export function PruebasSidebar({
     }));
   }
 
-  // Parse bloques_horario safely
   const parseBloques = (bloquesRaw) => {
     if (!bloquesRaw) return [];
     let bloques = bloquesRaw;
     if (typeof bloques === 'string') {
-      try { bloques = JSON.parse(bloques); } catch (e) { return []; }
+      try { bloques = JSON.parse(bloques); } catch { return []; }
     }
     return Array.isArray(bloques) ? bloques : [];
   };
 
-  // Contar pruebas registradas por curso (codigo+seccion), excluyendo EXAMEN
   const getEvalCount = (codigo, seccion) => {
     return pruebasRegistradas.filter(pr => {
       const tipo = (pr.tipo_prueba || '').toUpperCase();
@@ -163,7 +188,6 @@ export function PruebasSidebar({
     }).length;
   };
 
-  // Verificar si un curso ya tiene su examen registrado
   const hasExamenRegistrado = (codigo, seccion) => {
     return pruebasRegistradas.some(pr => {
       const tipo = (pr.tipo_prueba || '').toUpperCase();
@@ -171,7 +195,6 @@ export function PruebasSidebar({
     });
   };
 
-  // Buscar cantidad_evaluaciones del curso desde cualquier prueba hermana (mismo codigo+seccion)
   const getCantidadEvaluaciones = (codigo, seccion) => {
     const match = pruebas.find(p => 
       p.codigo === codigo && 
@@ -181,7 +204,6 @@ export function PruebasSidebar({
     return match ? match.cantidad_evaluaciones : null;
   };
 
-  // Format a block for display in dropdown
   const formatBloque = (bloque) => {
     if (bloque.dia) {
       return `${bloque.dia} ${bloque.inicio}-${bloque.fin}`;
@@ -189,38 +211,63 @@ export function PruebasSidebar({
     return `${bloque.inicio}-${bloque.fin}`;
   };
 
+  // Contar fechas donde TODAS las secciones de un grupo tienen registro
+  const getGrupEvalCount = (grupo) => {
+    const secciones = new Set(grupo._secciones);
+    const fechas = {};
+    pruebasRegistradas.forEach(pr => {
+      const tipo = (pr.tipo_prueba || '').toUpperCase();
+      if (pr.codigo !== grupo.codigo || tipo === 'EXAMEN') return;
+      if (!secciones.has(pr.seccion)) return;
+      if (!fechas[pr.fecha]) fechas[pr.fecha] = new Set();
+      fechas[pr.fecha].add(pr.seccion);
+    });
+    return Object.values(fechas).filter(s => s.size >= secciones.size).length;
+  };
+
   const renderPostit = (p, col) => {
-    // Obtener el estilo de color basado en especialidades y semestres
+    const isGrupo = p._esGrupo;
+    const ids = isGrupo ? p.ids : [String(p.id)];
+    const primeraId = ids[0];
+    
     const colorStyle = getPostitStyle(p.especialidades_semestres, false);
     const bloques = parseBloques(p.bloques_horario);
-    const selectedIdx = selectedBlocks[String(p.id)] || 0;
+    const selectedIdx = selectedBlocks[primeraId] || 0;
 
     const tipoPrueba = (p.tipo_prueba || '').toUpperCase();
-    const evalCount = getEvalCount(p.codigo, p.seccion);
-    // Buscar cantidad_evaluaciones en la propia prueba o en hermanas del mismo curso
-    const maxEval = p.cantidad_evaluaciones != null ? p.cantidad_evaluaciones : getCantidadEvaluaciones(p.codigo, p.seccion);
+    const evalCount = isGrupo
+      ? getGrupEvalCount(p)
+      : getEvalCount(p.codigo, p.seccion);
+    const maxEval = isGrupo
+      ? p.cantidad_evaluaciones
+      : p.cantidad_evaluaciones != null ? p.cantidad_evaluaciones : getCantidadEvaluaciones(p.codigo, p.seccion);
     const isExamen = tipoPrueba === 'EXAMEN';
-    const examenYaRegistrado = isExamen && hasExamenRegistrado(p.codigo, p.seccion);
+    const examenYaRegistrado = isExamen && (isGrupo
+      ? p._secciones.some(sec => hasExamenRegistrado(p.codigo, sec))
+      : hasExamenRegistrado(p.codigo, p.seccion));
     const limitReached = !isExamen && maxEval != null && evalCount >= maxEval;
     
     return (
       <div
-        key={p.id}
-        className={`prueba-postit ${limitReached || examenYaRegistrado ? 'limit-reached' : ''}`}
+        key={String(p.id)}
+        className={`prueba-postit ${limitReached || examenYaRegistrado ? 'limit-reached' : ''} ${isGrupo ? 'prueba-postit-grupo' : ''}`}
         draggable={!limitReached && !examenYaRegistrado}
         onDragStart={(e) => {
           if (limitReached || examenYaRegistrado) { e.preventDefault(); return; }
-          onDragStart(e, p.id, col);
+          onDragStart(e, ids, col);
         }}
         onDragOver={onDragOver}
         onDrop={(e) => onDropOnItem(e, col, p.id)}
         style={colorStyle}
         title={limitReached ? `Límite alcanzado (${evalCount}/${maxEval})` : examenYaRegistrado ? 'Examen ya registrado' : ''}
       >
-        <div className="prueba-postit-title">{p.codigo}-{p.seccion}</div>
-        <div className="prueba-postit-subtitle">{p.titulo || 'Sin título'}</div>
+        <div className="prueba-postit-title">
+          {p.codigo}
+          {isGrupo && <span className="prueba-seccion-badge">Secciones {p._secciones.join(',')}</span>}
+          {!isGrupo && <span>-{p.seccion}</span>}
+        </div>
+        <div className="prueba-postit-subtitle">{p.titulo}</div>
         <div className="prueba-postit-body">{p.tipo_prueba}</div>
-        {/* Contador de evaluaciones */}
         {maxEval != null && !isExamen && (
           <div className={`eval-counter ${limitReached ? 'full' : ''}`}>
             {evalCount}/{maxEval} eval.
@@ -231,7 +278,7 @@ export function PruebasSidebar({
             {examenYaRegistrado ? '1/1 examen' : '0/1 examen'}
           </div>
         )}
-        {bloques.length > 0 && (
+        {bloques.length > 0 && !isGrupo && (
           <div className="prueba-postit-bloque">
             {bloques.length === 1 ? (
               <span className="bloque-unico">{formatBloque(bloques[0])}</span>
@@ -243,7 +290,7 @@ export function PruebasSidebar({
                   e.stopPropagation();
                   setSelectedBlocks(prev => ({
                     ...prev,
-                    [String(p.id)]: parseInt(e.target.value)
+                    [primeraId]: parseInt(e.target.value)
                   }));
                 }}
                 onClick={(e) => e.stopPropagation()}
@@ -257,6 +304,34 @@ export function PruebasSidebar({
               </select>
             )}
           </div>
+        )}
+        {isGrupo && (
+          <button
+            className="prueba-separar-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPruebasSeparadas(prev => new Set([...prev, p.codigo]));
+            }}
+            title="Separar secciones individualmente"
+          >
+            Separar
+          </button>
+        )}
+        {pruebasSeparadas.has(p.codigo) && (
+          <button
+            className="prueba-unir-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPruebasSeparadas(prev => {
+                const next = new Set(prev);
+                next.delete(p.codigo);
+                return next;
+              });
+            }}
+            title="Volver a unir secciones"
+          >
+            Unir
+          </button>
         )}
       </div>
     );
@@ -293,33 +368,36 @@ export function PruebasSidebar({
 
         <div className="filtro-group">
           <label htmlFor="filtro-semestre-pruebas">Semestre:</label>
-          <select 
-            id="filtro-semestre-pruebas"
-            value={filtroSemestre} 
-            onChange={(e) => onFiltroSemestreChange(e.target.value)}
-            className="filtro-select"
-          >
-            <option value="TODOS">Todos</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="7">7</option>
-            <option value="8">8</option>
-            <option value="9">9</option>
-            <option value="10">10</option>
-            <option value="11">11</option>
-          </select>
+          <div className="semestre-checkboxes" id="filtro-semestre-pruebas">
+            {[1,2,3,4,5,6,7,8,9,10,11].map(sem => (
+              <label key={sem} className="semestre-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={filtroSemestre.length === 0 || filtroSemestre.includes(String(sem))}
+                  onChange={() => {
+                    let nuevos;
+                    if (filtroSemestre.length === 0) {
+                      nuevos = [1,2,3,4,5,6,7,8,9,10,11].filter(s => s !== sem).map(String);
+                    } else if (filtroSemestre.includes(String(sem))) {
+                      nuevos = filtroSemestre.filter(s => s !== String(sem));
+                    } else {
+                      nuevos = [...filtroSemestre, String(sem)];
+                    }
+                    onFiltroSemestreChange(nuevos.length === 11 ? [] : nuevos);
+                  }}
+                />
+                {sem}
+              </label>
+            ))}
+          </div>
         </div>
 
-        {(filtroEspecialidad !== 'TODOS' || filtroSemestre !== 'TODOS') && (
+        {(filtroEspecialidad !== 'TODOS' || filtroSemestre.length > 0) && (
           <button 
             className="limpiar-filtros-btn"
             onClick={() => {
               onFiltroEspecialidadChange('TODOS');
-              onFiltroSemestreChange('TODOS');
+              onFiltroSemestreChange([]);
             }}
           >
             Limpiar filtros

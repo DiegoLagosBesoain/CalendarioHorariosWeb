@@ -624,6 +624,22 @@
   gap: 30px;
 }
 
+.calendar-cascade-month {
+  background: white;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+}
+
+.calendar-month-title {
+  margin: 0 0 20px 0;
+  font-size: 22px;
+  color: #333;
+  text-align: center;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #667eea;
+}
+
 /* ── Layout paginado ── */
 .calendar-paginated {
   display: flex;
@@ -702,6 +718,36 @@
 
 .day-mismatch-legend {
   background: #2196f3;
+}
+
+/* ── Protected schedule warning ── */
+.prueba-tag.protected-schedule {
+  box-shadow: 0 0 8px rgba(255, 152, 0, 0.6), 0 1px 2px rgba(0, 0, 0, 0.1);
+  animation: pulse-protected 2s ease-in-out infinite;
+}
+
+.prueba-tag.protected-schedule:hover {
+  box-shadow: 0 0 12px rgba(255, 152, 0, 0.8), 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.prueba-protected-warning {
+  font-size: 8px;
+  font-weight: 700;
+  color: #e65100;
+  background: rgba(255, 152, 0, 0.15);
+  padding: 1px 4px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-top: 1px;
+}
+
+@keyframes pulse-protected {
+  0%, 100% { box-shadow: 0 0 4px rgba(255, 152, 0, 0.4); }
+  50% { box-shadow: 0 0 12px rgba(255, 152, 0, 0.7); }
+}
+
+.protected-schedule-legend {
+  background: #ff9800;
 }
 
 /* ── Responsivo para calendar-with-sidebar ── */

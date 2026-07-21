@@ -251,3 +251,101 @@
   font-weight: bold;
   white-space: nowrap;
 }
+
+/* Checkboxes de semestre */
+.semestre-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.semestre-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  color: #555;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: white;
+  border: 1px solid #ddd;
+  transition: all 0.2s;
+}
+
+.semestre-checkbox-label:hover {
+  border-color: #667eea;
+  background: #f0f4ff;
+}
+
+.semestre-checkbox-label input[type="checkbox"] {
+  width: 10px;
+  height: 10px;
+  margin: 0;
+  cursor: pointer;
+}
+
+/* Grupo de ayudantías */
+.postit-grupo {
+  border: 2px dashed #667eea;
+}
+
+.postit-seccion-badge {
+  display: block;
+  font-size: 8px;
+  color: #667eea;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.postit-separar-btn {
+  margin-top: 6px;
+  width: 100%;
+  padding: 3px 6px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.postit-separar-btn:hover {
+  background: #5568d3;
+}
+
+.postit-unir-btn {
+  width: 100%;
+  padding: 2px 0;
+  font-size: 9px;
+  border: none;
+  border-radius: 0 0 4px 4px;
+  background: #4caf50;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.postit-unir-btn:hover {
+  background: #388e3c;
+}
+
+/* Disponibilidad */
+.postit-disponibilidad {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px 4px;
+}
+.disp-badge {
+  font-size: 7px;
+  color: #fff;
+  background: #4caf50;
+  padding: 1px 3px;
+  border-radius: 2px;
+  cursor: help;
+  white-space: nowrap;
+}

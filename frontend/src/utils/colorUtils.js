@@ -245,6 +245,21 @@ export function getBackgroundStyle(colores) {
 }
 
 /**
+ * Determina el color de texto basado en el brillo del fondo
+ * Retorna 'white' para fondos oscuros, '#333' para fondos claros
+ */
+function getTextColor(backgroundColor) {
+  if (!backgroundColor) return '#333';
+  const hex = backgroundColor.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  // Fórmula de luminosidad relativa (W3C)
+  const luminosidad = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminosidad > 0.5 ? '#333' : 'white';
+}
+
+/**
  * Obtiene el estilo completo para un postit, incluyendo conflictos
  * @param {Object|String} especialidades_semestres - JSON con las especialidades
  * @param {Boolean} tieneConflicto - Si el postit tiene conflictos
@@ -256,6 +271,7 @@ export function getPostitStyle(especialidades_semestres, tieneConflicto = false,
     return {
       background: COLOR_CONFLICTO,
       borderLeftColor: '#d32f2f',
+      color: '#333',
     };
   }
   
@@ -264,10 +280,12 @@ export function getPostitStyle(especialidades_semestres, tieneConflicto = false,
   
   // Determinar el color del borde (usar el primer color)
   const borderColor = colores.length > 0 ? colores[0].color : '#ffeb3b';
+  const textColor = colores.length > 0 ? getTextColor(colores[0].color) : '#333';
   
   return {
     ...backgroundStyle,
     borderLeftColor: borderColor,
+    color: textColor,
   };
 }
 

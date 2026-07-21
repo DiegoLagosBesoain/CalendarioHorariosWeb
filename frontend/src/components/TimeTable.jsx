@@ -2,15 +2,15 @@ import { useState, useEffect } from 'react';
 import { HORARIOS } from '../constants/horarios';
 import { horasRegistradasService } from '../services/api';
 import { getPostitStyle, getTipoHorario } from '../utils/colorUtils';
+import { filterForSemester, determinarSemestre } from '../utils/filtros';
 import '../styles/TimeTable.css';
 import HorariosSidebar from './HorariosSidebar';
 
 export function TimeTable({ 
   dashboardId, 
-  horasRegistradas = [], 
   horariosProgramables = [],
   filtroEspecialidad = 'TODOS',
-  filtroSemestre = 'TODOS',
+  filtroSemestre = [],
   onFiltroEspecialidadChange = () => {},
   onFiltroSemestreChange = () => {},
   filtrarHorario = () => true,
@@ -20,7 +20,7 @@ export function TimeTable({
   const [semestreActual, setSemestreActual] = useState(0);
   // placedItems: { [semestreId]: [ { id (BD), instanceId, hora_programable_id, codigo, seccion, titulo, tipo_hora, cantidad_horas, dia, bloqueIndex } ] }
   const [placedItems, setPlacedItems] = useState({});
-  const [cargando, setCargando] = useState(false);
+  const [_cargando, setCargando] = useState(false);
   const [warningsMap, setWarningsMap] = useState({});  // { instanceId: [msg1, msg2, ...] }
   const [conflictingPostits, setConflictingPostits] = useState(new Set());
 
@@ -30,13 +30,6 @@ export function TimeTable({
     "11:30": "11:30-12:20", "12:30": "12:30-13:20", "13:30": "13:30-14:20",
     "14:30": "14:30-15:20", "15:30": "15:30-16:20", "16:30": "16:30-17:20",
     "17:30": "17:30-18:20", "18:30": "18:30-19:20", "19:30": "19:30-20:20"
-  };
-
-  // Normalizar hora: "09:30" -> "9:30"
-  const normalizarHora = (h) => {
-    if (!h) return h;
-    const [hh, mm] = h.split(':');
-    return `${parseInt(hh)}:${mm}`;
   };
 
   /**
@@ -129,6 +122,7 @@ export function TimeTable({
     if (dashboardId) {
       cargarHorasRegistradas();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, refreshKey]);
 
   // Re-evaluar conflictos cuando llegan los horariosProgramables (recarga de página)
@@ -136,12 +130,13 @@ export function TimeTable({
     if (horariosProgramables.length > 0 && Object.keys(placedItems).length > 0) {
       evaluarConflictosDesBD(placedItems);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [horariosProgramables]);
 
   // Función para determinar si un horario es protegido
   const esHorarioProtegido = (dia, horaInicio, semestreId) => {
-    // Solo aplica para plan_comun y 5to_6to
-    if (!['plan_comun', '5to_6to'].includes(semestreId)) {
+    // Solo aplica para plan_comun, 5to_6to y 7mo_8vo
+    if (!['plan_comun', '5to_6to', '7mo_8vo'].includes(semestreId)) {
       return false;
     }
 
@@ -212,36 +207,40 @@ export function TimeTable({
   // Determinar el semestre basado en especialidades del programable
   const determinarSemestrePorEspecialidades = (horaProgId) => {
     const prog = horariosProgramables.find(h => h.id === horaProgId);
-    if (!prog) return 'plan_comun';
-
-    let esp = prog.especialidades_semestres;
-    if (typeof esp === 'string') {
-      try { esp = JSON.parse(esp); } catch (err) { }
-    }
-
-    if (Array.isArray(esp)) {
-      // Si tiene semestres altos, asignar a ese grupo
-      if (esp.some(e => [9, 10, 11].includes(Number(e.semestre)))) return '9no_10_11';
-      if (esp.some(e => [7, 8].includes(Number(e.semestre)))) return '7mo_8vo';
-      if (esp.some(e => [5, 6].includes(Number(e.semestre)))) return '5to_6to';
-      return 'plan_comun';
-    }
-
-    return 'plan_comun';
+    return determinarSemestre(prog);
   };
 
   // Calcular horas usadas de un programable en TODOS los semestres
   const getHorasUsadas = (horaProgId) => {
+    const id = String(horaProgId);
     const bloquesUnicos = new Set();
     Object.values(placedItems).forEach(semItems => {
       semItems
-        .filter(pi => pi.hora_programable_id === horaProgId)
+        .filter(pi => String(pi.hora_programable_id) === id)
         .forEach((pi) => {
           // El mismo bloque espejado en distintos horarios cuenta como una sola hora.
           bloquesUnicos.add(`${pi.dia}|${pi.bloqueIndex}`);
         });
     });
     return bloquesUnicos.size;
+  };
+
+  // Contar cuántos bloques tienen TODAS las secciones de un grupo juntas
+  const getGrupoUsos = (groupIds) => {
+    const bloqueIds = groupIds.map(String);
+    const bloqueSecciones = {};
+    Object.values(placedItems).forEach(semItems => {
+      semItems.forEach(pi => {
+        const key = `${pi.dia}|${pi.bloqueIndex}`;
+        if (!bloqueSecciones[key]) bloqueSecciones[key] = new Set();
+        bloqueSecciones[key].add(String(pi.hora_programable_id));
+      });
+    });
+    let count = 0;
+    Object.values(bloqueSecciones).forEach(secciones => {
+      if (bloqueIds.every(id => secciones.has(id))) count++;
+    });
+    return count;
   };
 
   // Verificar si se puede agregar más instancias de un programable
@@ -251,47 +250,10 @@ export function TimeTable({
 
   // Filtrar programables para un semestre particular
   // Ahora también aplica los filtros de usuario (especialidad/semestre)
-  function filterForSemester(semestreId) {
+  function filterForSemesterLocal(semestreId) {
     return (h) => {
-      // Primero aplicar el filtro de usuario
       if (!filtrarHorario(h)) return false;
-      
-      if (!h || !h.especialidades_semestres) return false;
-      let esp = h.especialidades_semestres;
-      if (typeof esp === 'string') {
-        try { esp = JSON.parse(esp); } catch (err) { }
-      }
-
-      if (Array.isArray(esp)) {
-        if (semestreId === 'plan_comun') {
-          return esp.some(e => 
-            e.nombre === 'Plan Común' || 
-            (e.nombre && e.nombre.toLowerCase && e.nombre.toLowerCase() === 'plan común')
-          );
-        }
-        const targets = {
-          '5to_6to': [5, 6],
-          '7mo_8vo': [7, 8],
-          '9no_10_11': [9, 10, 11]
-        }[semestreId];
-        if (!targets) return false;
-        return esp.some(e => targets.includes(Number(e.semestre)));
-      }
-
-      if (typeof esp === 'object') {
-        if (semestreId === 'plan_comun') {
-          return Object.prototype.hasOwnProperty.call(esp, 'Plan Común') && esp['Plan Común'];
-        }
-        const targets = {
-          '5to_6to': [5, 6],
-          '7mo_8vo': [7, 8],
-          '9no_10_11': [9, 10, 11]
-        }[semestreId];
-        if (!targets) return false;
-        return Object.values(esp).some(v => targets.includes(Number(v)));
-      }
-
-      return false;
+      return filterForSemester(h, semestreId);
     };
   }
 
@@ -330,55 +292,51 @@ export function TimeTable({
                     backgroundColor: bloque.colorFila,
                     borderBottomColor: bloque.tipo === 'almuerzo' ? '#b39ddb' : '#ddd'
                   }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    let data = null;
-                    try { data = e.dataTransfer.getData('application/json'); } catch (err) { }
-                    if (!data) data = e.dataTransfer.getData('text/plain');
-                    if (!data) return;
-                    try { data = JSON.parse(data); } catch (err) { }
-                    
-                    // Si es un placed item (movimiento dentro del horario)
-                    if (data && data.type === 'placed') {
-                      // Reorganizar el item a la nueva posición
-                      const { id: horaRegId, instanceId, semestreId } = data;
-                      if (semestreId !== semestre.id) return; // No permitir mover entre semestres
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      let data = null;
+                      try { data = e.dataTransfer.getData('application/json'); } catch { /* ignore */ }
+                      if (!data) data = e.dataTransfer.getData('text/plain');
+                      if (!data) return;
+                      try { data = JSON.parse(data); } catch { /* ignore */ }
                       
-                      // Actualizar en la BD
-                      horasRegistradasService.actualizar(horaRegId, dia, index)
-                        .then(() => {
-                          // Recargar desde el servidor para reflejar cambios en conflictos
-                          cargarHorasRegistradas();
-                        })
+                      // Si es un placed item (movimiento dentro del horario)
+                      if (data && data.type === 'placed') {
+                        const { id: horaRegId, instanceId: _instanceId, semestreId } = data;
+                        if (semestreId !== semestre.id) return;
+                        
+                        horasRegistradasService.actualizar(horaRegId, dia, index)
+                          .then(() => { cargarHorasRegistradas(); })
+                          .catch(err => {
+                            console.error('Error actualizando hora:', err);
+                            alert(`Error: ${err.message}`);
+                          });
+                        return;
+                      }
+                      
+                      // Si es un grupo de ids (ayudantías agrupadas)
+                      const ids = data.ids || (data.id ? [String(data.id)] : null);
+                      if (!ids) return;
+                      
+                      // Filtrar solo los que se pueden agregar
+                      const idsValidos = ids.filter(id => {
+                        const prog = horariosProgramables.find(h => String(h.id) === String(id));
+                        return prog && puedeAgregar(prog.id, prog.cantidad_horas);
+                      });
+                      
+                      if (idsValidos.length === 0) return;
+                      
+                      // Crear registros para cada id
+                      Promise.all(idsValidos.map(id =>
+                        horasRegistradasService.crear(id, dashboardId, dia, index, semestre.id)
+                      ))
+                        .then(() => { cargarHorasRegistradas(); })
                         .catch(err => {
-                          console.error('Error actualizando hora:', err);
+                          console.error('Error creando horas registradas:', err);
                           alert(`Error: ${err.message}`);
                         });
-                      return;
-                    }
-                    
-                    // Si es un programa nuevo desde la sidebar
-                    const id = data && data.id ? data.id : data;
-                    if (!id) return;
-                    
-                    const prog = horariosProgramables.find(h => String(h.id) === String(id));
-                    if (!prog) return;
-
-                    // Verificar si puede agregar más
-                    if (!puedeAgregar(prog.id, prog.cantidad_horas)) return;
-
-                    // Guardar en la BD
-                    horasRegistradasService.crear(prog.id, dashboardId, dia, index, semestre.id)
-                      .then(() => {
-                        // Recargar desde el servidor para reflejar conflictos correctamente
-                        cargarHorasRegistradas();
-                      })
-                      .catch(err => {
-                        console.error('Error creando hora registrada:', err);
-                        alert(`Error: ${err.message}`);
-                      });
-                  }}
+                    }}
                 >
                   <div className="cell-content">
                     {(placedItems[semestre.id] || [])
@@ -460,8 +418,9 @@ export function TimeTable({
       <div className="sidebar-container">
         <HorariosSidebar
           horarios={horariosProgramables}
-          filterFn={filterForSemester(semestre.id)}
+          filterFn={filterForSemesterLocal(semestre.id)}
           getHorasUsadas={getHorasUsadas}
+          getGrupoUsos={getGrupoUsos}
           puedeAgregar={puedeAgregar}
           tipoHorario={getTipoHorario(semestre.id)}
           filtroEspecialidad={filtroEspecialidad}
@@ -510,6 +469,21 @@ export function TimeTable({
         )}
       </div>
 
+      <div className="color-legend">
+        <span className="legend-label">Colores:</span>
+        <span className="legend-item" style={{ background: '#FFEB99', borderLeft: '3px solid #FFEB99', color: '#333' }}>Plan Común 1</span>
+        <span className="legend-item" style={{ background: '#A8E6A0', borderLeft: '3px solid #A8E6A0', color: '#333' }}>Plan Común 2 / ICI Impar</span>
+        <span className="legend-item" style={{ background: '#FFB3B3', borderLeft: '3px solid #FFB3B3', color: '#333' }}>Plan Común 3</span>
+        <span className="legend-item" style={{ background: '#A3D5FF', borderLeft: '3px solid #A3D5FF', color: '#333' }}>Plan Común 4 / IOC Impar</span>
+        <span className="legend-item" style={{ background: '#4CAF50', borderLeft: '3px solid #4CAF50', color: 'white' }}>ICI Par</span>
+        <span className="legend-item" style={{ background: '#2196F3', borderLeft: '3px solid #2196F3', color: 'white' }}>IOC Par</span>
+        <span className="legend-item" style={{ background: '#FF9800', borderLeft: '3px solid #FF9800', color: 'white' }}>ICE Par</span>
+        <span className="legend-item" style={{ background: '#757575', borderLeft: '3px solid #757575', color: 'white' }}>ICC Par</span>
+        <span className="legend-item" style={{ background: '#E91E63', borderLeft: '3px solid #E91E63', color: 'white' }}>ICA Par</span>
+        <span className="legend-item" style={{ background: '#9C27B0', borderLeft: '3px solid #9C27B0', color: 'white' }}>ICQ Par</span>
+        <span className="legend-item" style={{ background: '#FFCDD2', borderLeft: '3px solid #d32f2f', color: '#333' }}>Conflicto</span>
+      </div>
+
       {modoVisualizacion === 'cascada' ? (
         <div className="timetable-cascade">
           {HORARIOS.semestres.map((semestre) => renderHorarioWithSidebar(semestre))}
@@ -521,8 +495,9 @@ export function TimeTable({
             <div className="sidebar-container">
               <HorariosSidebar
                 horarios={horariosProgramables}
-                filterFn={filterForSemester(HORARIOS.semestres[semestreActual].id)}
+                filterFn={filterForSemesterLocal(HORARIOS.semestres[semestreActual].id)}
                 getHorasUsadas={getHorasUsadas}
+                getGrupoUsos={getGrupoUsos}
                 puedeAgregar={puedeAgregar}
                 tipoHorario={getTipoHorario(HORARIOS.semestres[semestreActual].id)}
                 filtroEspecialidad={filtroEspecialidad}

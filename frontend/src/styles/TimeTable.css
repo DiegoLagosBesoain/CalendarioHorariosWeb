@@ -360,6 +360,35 @@
   color: #333;
 }
 
+/* Color Legend */
+.color-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 15px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  align-items: center;
+}
+
+.legend-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  margin-right: 4px;
+}
+
+.legend-item {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  border-left-width: 3px;
+  border-left-style: solid;
+  white-space: nowrap;
+}
+
 .hour-item {
   background: white;
   padding: 4px;

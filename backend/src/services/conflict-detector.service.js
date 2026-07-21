@@ -310,6 +310,7 @@ function tieneConflictoDisponibilidad(hora) {
   try {
     const { disponibilidad, dia_semana, hora_inicio, profesor_1_id, profesor_2_id, tipo_hora } = hora;
 
+    // AYUDANTIA tiene disponibilidad completa (profesor LABT separado)
     if (tipo_hora === 'AYUDANTIA') {
       return false;
     }
@@ -367,8 +368,8 @@ function tieneConflictoHorarioProtegido(hora) {
   try {
     const { horario, dia_semana, hora_inicio } = hora;
 
-    // Solo aplica para plan_comun y 5to_6to
-    if (!['plan_comun', '5to_6to'].includes(horario)) {
+    // Solo aplica para plan_comun, 5to_6to y 7mo_8vo
+    if (!['plan_comun', '5to_6to', '7mo_8vo'].includes(horario)) {
       return false;
     }
 
@@ -525,6 +526,7 @@ async function reevaluarConflictosPruebasDashboard(dashboardId) {
     // Si la prueba tiene hora_inicio/hora_fin, buscar el bloque específico en
     // bloques_horario que coincida y verificar su día.
     // Si no tiene hora, verificar que el día esté en algún bloque.
+    // IMPORTANTE: usar getUTCDay() para evitar bugs de timezone (la fecha se almacena como DATE sin timezone)
     const diasSemanaMap = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     for (const prueba of pruebas) {
       const tipoPrueba = (prueba.tipo_prueba || '').toUpperCase();
@@ -538,8 +540,10 @@ async function reevaluarConflictosPruebasDashboard(dashboardId) {
       }
       if (!Array.isArray(bloques) || bloques.length === 0) continue;
 
-      // Obtener día de la fecha de la prueba
-      const diaFecha = diasSemanaMap[prueba.fecha.getDay()];
+      // Obtener día de la fecha de la prueba usando UTC para evitar timezone issues
+      // PostgreSQL almacena DATE como "YYYY-MM-DD", al usar UTC getters obtenemos el día correcto
+      const fechaObj = new Date(prueba.fecha);
+      const diaFecha = diasSemanaMap[fechaObj.getUTCDay()];
 
       let diaCoincide = false;
 
@@ -620,8 +624,9 @@ function tieneConflictoHorarioProtegidoPrueba(prueba) {
       return false;
     }
 
-    // Obtener día de la semana (0=Domingo, 1=Lunes, ... 6=Sábado)
-    const diaSemana = fecha.getDay();
+    // Obtener día de la semana usando UTC para evitar timezone issues
+    const fechaObj = new Date(fecha);
+    const diaSemana = fechaObj.getUTCDay();
     
     // 2=Martes, 3=Miércoles
     return [2, 3].includes(diaSemana);
