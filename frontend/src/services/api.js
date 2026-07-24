@@ -140,17 +140,19 @@ export const horasRegistradasService = {
     return res.json();
   },
 
-  async crear(horaProgramableId, dashboardId, dia, bloqueIndex, semestreId) {
+  async crear(horaProgramableId, dashboardId, dia, bloqueIndex, semestreId, horarioEspecifico = null) {
+    const body = {
+      horaProgramableId,
+      dashboardId,
+      dia,
+      bloqueIndex,
+      semestreId
+    };
+    if (horarioEspecifico) body.horarioEspecifico = horarioEspecifico;
     const res = await fetch(`${API_URL}/horas-registradas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        horaProgramableId, 
-        dashboardId, 
-        dia, 
-        bloqueIndex,
-        semestreId 
-      })
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       const err = await res.json();

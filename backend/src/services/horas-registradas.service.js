@@ -79,69 +79,6 @@ async function eliminar(id) {
 }
 
 /**
- * Guardar conflictos bidireccionales entre dos horas
- * Si A conflictúa con B, también B conflictúa con A
- */
-async function guardarConflictos(horaRegId, conflictIds) {
-  if (!conflictIds || conflictIds.length === 0) {
-    return;
-  }
-
-  // Obtener los conflictos actuales de la hora
-  const result = await pool.query(
-    `SELECT conflictos FROM horas_registradas WHERE id = $1`,
-    [horaRegId]
-  );
-
-  if (result.rows.length === 0) return;
-
-  let conflictosActuales = result.rows[0].conflictos || [];
-  if (typeof conflictosActuales === 'string') {
-    try {
-      conflictosActuales = JSON.parse(conflictosActuales);
-    } catch (e) {
-      conflictosActuales = [];
-    }
-  }
-
-  // Agregar nuevos conflictos
-  const nuevosConflictos = [...new Set([...conflictosActuales, ...conflictIds])];
-
-  // Guardar en la hora actual
-  await pool.query(
-    `UPDATE horas_registradas SET conflictos = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-    [JSON.stringify(nuevosConflictos), horaRegId]
-  );
-
-  // Guardar bidireccionales: agregar horaRegId a cada conflicto
-  for (const conflictId of conflictIds) {
-    const conflictResult = await pool.query(
-      `SELECT conflictos FROM horas_registradas WHERE id = $1`,
-      [conflictId]
-    );
-
-    if (conflictResult.rows.length === 0) continue;
-
-    let conflictosDelOtro = conflictResult.rows[0].conflictos || [];
-    if (typeof conflictosDelOtro === 'string') {
-      try {
-        conflictosDelOtro = JSON.parse(conflictosDelOtro);
-      } catch (e) {
-        conflictosDelOtro = [];
-      }
-    }
-
-    if (!conflictosDelOtro.includes(horaRegId)) {
-      conflictosDelOtro.push(horaRegId);
-      await pool.query(
-        `UPDATE horas_registradas SET conflictos = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-        [JSON.stringify(conflictosDelOtro), conflictId]
-      );
-    }
-  }
-}
-
-/**
  * Limpiar conflictos cuando se elimina una hora
  */
 async function limpiarConflictos(horaRegId) {
@@ -228,12 +165,6 @@ async function armarDiccionarioParaGoogleSheets(dashboardId) {
     return h * 60 + m;
   };
   
-  // Helper: convertir minutos desde medianoche a formato H:MM
-  const minutesToTime = (minutes) => {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return `${h}:${m < 10 ? '0' + m : m}`;
-  };
   
   // Agrupar horas por codigo+seccion, día y tipo
   const horasPorCursoYDia = {};
@@ -343,5 +274,5 @@ async function armarDiccionarioParaGoogleSheets(dashboardId) {
   return diccionario;
 }
 
-export { crear, obtenerPorDashboard, obtenerPorId, actualizar, eliminar, guardarConflictos, limpiarConflictos, limpiarDashboard, armarDiccionarioParaGoogleSheets };
+export { crear, obtenerPorDashboard, obtenerPorId, actualizar, eliminar, limpiarDashboard, armarDiccionarioParaGoogleSheets };
 

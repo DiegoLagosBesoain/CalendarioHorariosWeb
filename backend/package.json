@@ -9,11 +9,18 @@
     "pg": "^8.18.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "vitest": "^3.2.0",
+    "supertest": "^7.1.0",
+    "@eslint/js": "^9.39.1",
+    "globals": "^16.5.0"
   },
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/",
     "db:init": "node src/db/init.js",
     "db:reset": "node src/db/reset.js"
   }

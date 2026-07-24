@@ -11,7 +11,9 @@ export function HorariosSidebar({
   filtroEspecialidad = 'TODOS',
   filtroSemestre = [],
   onFiltroEspecialidadChange = () => {},
-  onFiltroSemestreChange = () => {}
+  onFiltroSemestreChange = () => {},
+  onSidebarDragStart = () => {},
+  onSidebarDragEnd = () => {}
 }) {
   const [columns, setColumns] = useState({
     CLASE: [],
@@ -85,6 +87,11 @@ export function HorariosSidebar({
       e.dataTransfer.setData('text/plain', JSON.stringify(payload));
     }
     e.dataTransfer.effectAllowed = 'move';
+
+    const firstProg = horariosMapRef.current.get(idArray[0]);
+    if (firstProg && firstProg.disponibilidad && Object.keys(firstProg.disponibilidad).length > 0) {
+      onSidebarDragStart(firstProg.disponibilidad);
+    }
   }
 
   function onDragOver(e) {
@@ -167,6 +174,7 @@ export function HorariosSidebar({
           if (isFull) { e.preventDefault(); return; }
           onDragStart(e, ids, col);
         }}
+        onDragEnd={onSidebarDragEnd}
         onDragOver={onDragOver}
         onDrop={(e) => onDropOnItem(e, col, h.id)}
         style={{ 
@@ -182,13 +190,16 @@ export function HorariosSidebar({
         </div>
         <div className="postit-subtitle">{h.titulo}</div>
         <div className="postit-body">{h.tipo_hora}{distribucion ? ` • ${distribucion}` : ''}</div>
-        {!isFull && h.disponibilidad && Object.keys(h.disponibilidad).length > 0 && (
+        {!isFull && (h.tipo_hora || '').toUpperCase() !== 'LAB/TALLER' && (
           <div className="postit-disponibilidad">
-            {Object.entries(h.disponibilidad).map(([dia, bloques]) => (
-              <span key={dia} className="disp-badge" title={`${dia}: ${bloques.join(', ')}`}>
-                {dia.slice(0, 3)} {bloques.length}
-              </span>
-            ))}
+            {h.disponibilidad && typeof h.disponibilidad === 'object' && Object.keys(h.disponibilidad).length > 0
+              ? Object.entries(h.disponibilidad).map(([dia, bloques]) => (
+                  <span key={dia} className="disp-badge" title={`${dia}: ${bloques.join(', ')}`}>
+                    {dia.slice(0, 3)} {bloques.length}
+                  </span>
+                ))
+              : <span className="disp-badge disp-none">Sin disponibilidad</span>
+            }
           </div>
         )}
         <div className="postit-footer">

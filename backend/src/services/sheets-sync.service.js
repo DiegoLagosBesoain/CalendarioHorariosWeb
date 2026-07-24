@@ -6,28 +6,12 @@ import {
 	obtenerHorariosProgramables,
 	obtenerPruebasProgramables,
 } from "./maestros.service.js";
-import {
-	reevaluarConflictosDashboard,
-	reevaluarConflictosPruebasDashboard,
-} from "./conflict-detector.service.js";
+import { reevaluarConflictosDashboard } from "./conflict-detector.service.js";
+import { reevaluarConflictosPruebasDashboard } from "./conflict-detector-pruebas.service.js";
+import { BLOQUES, DIAS } from "../constants/horarios.js";
+import { normalizarTexto, calcularHorariosDestino } from "../utils/horario-utils.js";
 
-const DIAS_RESPALDO = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
-const ORDEN_HORARIOS = ["plan_comun", "5to_6to", "7mo_8vo", "9no_10_11"];
-
-const BLOQUES = [
-	{ inicio: "8:30", fin: "9:20" },
-	{ inicio: "9:30", fin: "10:20" },
-	{ inicio: "10:30", fin: "11:20" },
-	{ inicio: "11:30", fin: "12:20" },
-	{ inicio: "12:30", fin: "13:20" },
-	{ inicio: "13:30", fin: "14:20" },
-	{ inicio: "14:30", fin: "15:20" },
-	{ inicio: "15:30", fin: "16:20" },
-	{ inicio: "16:30", fin: "17:20" },
-	{ inicio: "17:30", fin: "18:20" },
-	{ inicio: "18:30", fin: "19:20" },
-	{ inicio: "19:30", fin: "20:20" },
-];
+const DIAS_RESPALDO = DIAS;
 
 const TIPO_POR_ALIAS = {
 	CLAS: "CLASE",
@@ -41,14 +25,6 @@ const TIPO_POR_ALIAS = {
 	EXAMEN: "EXAMEN",
 	TARDE: "TARDE",
 };
-
-function normalizarTexto(valor) {
-	return String(valor ?? "")
-		.trim()
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.toUpperCase();
-}
 
 function normalizarClaveCurso(valor) {
 	return normalizarTexto(valor).replace(/[^A-Z0-9]/g, "");
@@ -200,71 +176,9 @@ function obtenerClaveCursoFila(fila) {
 	return normalizarClaveCurso(`${codigo}${seccion}`);
 }
 
-function parsearEspecialidades(especialidadesSemestres) {
-	if (!especialidadesSemestres) return [];
-	let parsed = especialidadesSemestres;
-	if (typeof parsed === "string") {
-		try {
-			parsed = JSON.parse(parsed);
-		} catch (_e) {
-			return [];
-		}
-	}
-
-	const pares = [];
-
-	if (Array.isArray(parsed)) {
-		for (const item of parsed) {
-			if (!item) continue;
-			if (typeof item === "object") {
-				pares.push({ nombre: item.nombre, semestre: item.semestre });
-			}
-		}
-		return pares;
-	}
-
-	if (typeof parsed === "object") {
-		for (const [nombre, valor] of Object.entries(parsed)) {
-			if (Array.isArray(valor)) {
-				for (const semestre of valor) {
-					pares.push({ nombre, semestre });
-				}
-			} else {
-				pares.push({ nombre, semestre: valor });
-			}
-		}
-	}
-
-	return pares;
-}
-
 function obtenerHorarioPreferente(especialidadesSemestres) {
-	const objetivos = obtenerHorariosObjetivo(especialidadesSemestres);
+	const objetivos = calcularHorariosDestino(especialidadesSemestres);
 	return objetivos[0] || "plan_comun";
-}
-
-function obtenerHorariosObjetivo(especialidadesSemestres) {
-	const horarios = new Set();
-	const pares = parsearEspecialidades(especialidadesSemestres);
-
-	for (const par of pares) {
-		const nombre = normalizarTexto(par.nombre);
-		const semestre = Number(String(par.semestre ?? "").replace(/[^0-9]/g, ""));
-
-		if (nombre === "PLAN COMUN" || nombre === "PLAN_COMUN") {
-			horarios.add("plan_comun");
-		}
-
-		if (!Number.isNaN(semestre)) {
-			if (semestre <= 4) horarios.add("plan_comun");
-			if (semestre >= 5 && semestre <= 6) horarios.add("5to_6to");
-			if (semestre >= 7 && semestre <= 8) horarios.add("7mo_8vo");
-			if (semestre >= 9) horarios.add("9no_10_11");
-		}
-	}
-
-	const ordenados = ORDEN_HORARIOS.filter((h) => horarios.has(h));
-	return ordenados.length > 0 ? ordenados : ["plan_comun"];
 }
 
 function extraerEntradasHorasDesdeMaestro(maestrosData) {
@@ -337,7 +251,7 @@ function construirIndiceHorasProgramables(horasProgramables) {
 		porTipo.get(tipo).push({
 			...hp,
 			horarioPreferente: obtenerHorarioPreferente(hp.especialidades_semestres),
-			horariosObjetivo: obtenerHorariosObjetivo(hp.especialidades_semestres),
+			horariosObjetivo: calcularHorariosDestino(hp.especialidades_semestres),
 		});
 	}
 

@@ -5,6 +5,7 @@ import { getPostitStyle, getTipoHorario } from '../utils/colorUtils';
 import { filterForSemester, determinarSemestre } from '../utils/filtros';
 import '../styles/TimeTable.css';
 import HorariosSidebar from './HorariosSidebar';
+import { undoManager, CrearCommand, MoverCommand, EliminarCommand } from '../commands';
 
 export function TimeTable({ 
   dashboardId, 
@@ -23,6 +24,9 @@ export function TimeTable({
   const [_cargando, setCargando] = useState(false);
   const [warningsMap, setWarningsMap] = useState({});  // { instanceId: [msg1, msg2, ...] }
   const [conflictingPostits, setConflictingPostits] = useState(new Set());
+  const [draggedDisponibilidad, setDraggedDisponibilidad] = useState(null);
+  const [operando, setOperando] = useState(false);
+  const [undoVersion, setUndoVersion] = useState(0);
 
   // Mapa de bloques: inicio -> rango completo
   const BLOQUES_MAP = {
@@ -150,6 +154,33 @@ export function TimeTable({
     const horasProhibidas = horariosProtegidos[dia] || [];
     return horasProhibidas.includes(horaInicio);
   };
+
+  const handleUndo = async () => {
+    if (!undoManager.canUndo) return;
+    setOperando(true);
+    try {
+      await undoManager.undo();
+      setUndoVersion(v => v + 1);
+      await cargarHorasRegistradas();
+    } catch (err) {
+      console.error('Error deshaciendo:', err);
+      alert(`Error al deshacer: ${err.message}`);
+    } finally {
+      setOperando(false);
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const cargarHorasRegistradas = async () => {
     try {
@@ -284,10 +315,19 @@ export function TimeTable({
                 {bloque.tipo === 'almuerzo' ? '🍽️' : ''} {bloque.inicio} - {bloque.fin}
               </div>
 
-              {HORARIOS.dias.map((dia) => (
+              {HORARIOS.dias.map((dia) => {
+                const bloqueCompleto = BLOQUES_MAP[bloque.inicio];
+                let cellDragClass = '';
+                if (draggedDisponibilidad && Object.keys(draggedDisponibilidad).length > 0) {
+                  const diaDisp = draggedDisponibilidad[dia];
+                  const isAvailable = diaDisp && diaDisp.includes(bloqueCompleto);
+                  cellDragClass = isAvailable ? 'cell-available' : 'cell-unavailable';
+                }
+
+                return (
                 <div
                   key={`${dia}-${bloque.inicio}`}
-                  className="cell"
+                  className={`cell ${cellDragClass}`.trim()}
                   style={{
                     backgroundColor: bloque.colorFila,
                     borderBottomColor: bloque.tipo === 'almuerzo' ? '#b39ddb' : '#ddd'
@@ -295,47 +335,61 @@ export function TimeTable({
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
+                      setDraggedDisponibilidad(null);
                       let data = null;
                       try { data = e.dataTransfer.getData('application/json'); } catch { /* ignore */ }
                       if (!data) data = e.dataTransfer.getData('text/plain');
                       if (!data) return;
                       try { data = JSON.parse(data); } catch { /* ignore */ }
                       
-                      // Si es un placed item (movimiento dentro del horario)
                       if (data && data.type === 'placed') {
-                        const { id: horaRegId, instanceId: _instanceId, semestreId } = data;
+                        const { id: horaRegId, instanceId: _instanceId, semestreId, dia: oldDia, bloqueIndex: oldBloqueIndex } = data;
                         if (semestreId !== semestre.id) return;
-                        
-                        horasRegistradasService.actualizar(horaRegId, dia, index)
-                          .then(() => { cargarHorasRegistradas(); })
+
+                        setOperando(true);
+                        const cmd = new MoverCommand(horasRegistradasService, horaRegId, oldDia, oldBloqueIndex, dia, index);
+                        undoManager.execute(cmd)
+                          .then(() => {
+                            setUndoVersion(v => v + 1);
+                            cargarHorasRegistradas();
+                          })
                           .catch(err => {
-                            console.error('Error actualizando hora:', err);
+                            console.error('Error moviendo hora:', err);
                             alert(`Error: ${err.message}`);
-                          });
+                          })
+                          .finally(() => setOperando(false));
                         return;
                       }
                       
-                      // Si es un grupo de ids (ayudantías agrupadas)
                       const ids = data.ids || (data.id ? [String(data.id)] : null);
                       if (!ids) return;
-                      
-                      // Filtrar solo los que se pueden agregar
+
                       const idsValidos = ids.filter(id => {
                         const prog = horariosProgramables.find(h => String(h.id) === String(id));
                         return prog && puedeAgregar(prog.id, prog.cantidad_horas);
                       });
-                      
+
                       if (idsValidos.length === 0) return;
-                      
-                      // Crear registros para cada id
-                      Promise.all(idsValidos.map(id =>
-                        horasRegistradasService.crear(id, dashboardId, dia, index, semestre.id)
-                      ))
-                        .then(() => { cargarHorasRegistradas(); })
+
+                      setOperando(true);
+                      const paramsList = idsValidos.map(id => ({
+                        horaProgramableId: id,
+                        dashboardId,
+                        dia,
+                        bloqueIndex: index,
+                        semestreId: semestre.id
+                      }));
+                      const cmd = new CrearCommand(horasRegistradasService, paramsList);
+                      undoManager.execute(cmd)
+                        .then(() => {
+                          setUndoVersion(v => v + 1);
+                          cargarHorasRegistradas();
+                        })
                         .catch(err => {
                           console.error('Error creando horas registradas:', err);
                           alert(`Error: ${err.message}`);
-                        });
+                        })
+                        .finally(() => setOperando(false));
                     }}
                 >
                   <div className="cell-content">
@@ -374,6 +428,10 @@ export function TimeTable({
                               semestreId: semestre.id,
                               ...pi
                             }));
+                            const prog = horariosProgramables.find(p => p.id === pi.hora_programable_id);
+                            if (prog && prog.disponibilidad && typeof prog.disponibilidad === 'object' && Object.keys(prog.disponibilidad).length > 0) {
+                              setDraggedDisponibilidad(prog.disponibilidad);
+                            }
                           }}
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -384,13 +442,23 @@ export function TimeTable({
                                 className="remove-btn"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  // Eliminar de la BD
-                                  horasRegistradasService.eliminar(pi.id)
+                                  setOperando(true);
+                                  const cmd = new EliminarCommand(horasRegistradasService, [{
+                                    id: pi.id,
+                                    horaProgramableId: pi.hora_programable_id,
+                                    dashboardId,
+                                    dia: pi.dia,
+                                    bloqueIndex: pi.bloqueIndex,
+                                    semestreId: semestre.id,
+                                    horario: semestre.id
+                                  }]);
+                                  undoManager.execute(cmd)
                                     .then(() => {
-                                      // Recargar desde el servidor para reflejar cambios en conflictos
+                                      setUndoVersion(v => v + 1);
                                       cargarHorasRegistradas();
                                     })
-                                    .catch(err => console.error('Error eliminando hora:', err));
+                                    .catch(err => console.error('Error eliminando hora:', err))
+                                    .finally(() => setOperando(false));
                                 }}
                               >
                                 ✕
@@ -404,7 +472,7 @@ export function TimeTable({
                     })}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           ))}
         </div>
@@ -427,6 +495,8 @@ export function TimeTable({
           filtroSemestre={filtroSemestre}
           onFiltroEspecialidadChange={onFiltroEspecialidadChange}
           onFiltroSemestreChange={onFiltroSemestreChange}
+          onSidebarDragStart={setDraggedDisponibilidad}
+          onSidebarDragEnd={() => setDraggedDisponibilidad(null)}
         />
       </div>
     </div>
@@ -435,18 +505,28 @@ export function TimeTable({
   return (
     <div className="timetable-container">
       <div className="timetable-controls">
-        <div className="view-mode-selector">
+        <div className="controls-row">
+          <div className="view-mode-selector">
+            <button
+              className={`mode-btn ${modoVisualizacion === 'cascada' ? 'active' : ''}`}
+              onClick={() => setModoVisualizacion('cascada')}
+            >
+              📋 Cascada
+            </button>
+            <button
+              className={`mode-btn ${modoVisualizacion === 'paginado' ? 'active' : ''}`}
+              onClick={() => setModoVisualizacion('paginado')}
+            >
+              📄 Paginado
+            </button>
+          </div>
           <button
-            className={`mode-btn ${modoVisualizacion === 'cascada' ? 'active' : ''}`}
-            onClick={() => setModoVisualizacion('cascada')}
+            className="undo-btn"
+            disabled={!undoManager.canUndo}
+            onClick={handleUndo}
+            title="Deshacer (Ctrl+Z)"
           >
-            📋 Cascada
-          </button>
-          <button
-            className={`mode-btn ${modoVisualizacion === 'paginado' ? 'active' : ''}`}
-            onClick={() => setModoVisualizacion('paginado')}
-          >
-            📄 Paginado
+            ↩ Deshacer
           </button>
         </div>
 
@@ -484,6 +564,8 @@ export function TimeTable({
         <span className="legend-item" style={{ background: '#FFCDD2', borderLeft: '3px solid #d32f2f', color: '#333' }}>Conflicto</span>
       </div>
 
+      {operando && <div className="loading-overlay">Verificando conflictos…</div>}
+
       {modoVisualizacion === 'cascada' ? (
         <div className="timetable-cascade">
           {HORARIOS.semestres.map((semestre) => renderHorarioWithSidebar(semestre))}
@@ -504,6 +586,8 @@ export function TimeTable({
                 filtroSemestre={filtroSemestre}
                 onFiltroEspecialidadChange={onFiltroEspecialidadChange}
                 onFiltroSemestreChange={onFiltroSemestreChange}
+                onSidebarDragStart={setDraggedDisponibilidad}
+                onSidebarDragEnd={() => setDraggedDisponibilidad(null)}
               />
             </div>
           </div>

@@ -2,7 +2,7 @@ import express from 'express';
 import  pool  from '../db/pool.js';
 import * as pruebasRegistradasService from '../services/pruebas-registradas.service.js';
 import * as appScriptService from '../services/appscript.service.js';
-import { reevaluarConflictosPruebasDashboard } from '../services/conflict-detector.service.js';
+import { reevaluarConflictosPruebasDashboard } from '../services/conflict-detector-pruebas.service.js';
 
 const router = express.Router();
 

@@ -17,9 +17,39 @@
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
+.controls-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .view-mode-selector {
   display: flex;
   gap: 10px;
+}
+
+.undo-btn {
+  padding: 8px 14px;
+  border: 2px solid #ff9800;
+  background: white;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  color: #ff9800;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.undo-btn:hover:not(:disabled) {
+  background: #ff9800;
+  color: white;
+}
+
+.undo-btn:disabled {
+  border-color: #ddd;
+  color: #ccc;
+  cursor: not-allowed;
 }
 
 .mode-btn {
@@ -125,6 +155,8 @@
 .timetable-with-sidebar .timetable-view {
   min-width: 0;
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 320px);
 }
 
 .sidebar-container {
@@ -350,6 +382,16 @@
   border-right: none;
 }
 
+.cell-available {
+  background-color: #a5d6a7 !important;
+  box-shadow: inset 0 0 0 2px #4caf50;
+}
+
+.cell-unavailable {
+  background-color: #ef9a9a !important;
+  box-shadow: inset 0 0 0 2px #f44336;
+}
+
 .cell-content {
   width: 100%;
   height: 100%;
@@ -399,6 +441,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Loading overlay */
+.timetable-container {
+  position: relative;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+  border-radius: 10px;
 }
 
 @media (max-width: 1400px) {

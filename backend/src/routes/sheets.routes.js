@@ -8,7 +8,8 @@ import {
   limpiarPruebasProgramables,
   actualizarCalendarioPruebas,
 } from "../services/maestros.service.js";
-import { reevaluarConflictosDashboard, reevaluarConflictosPruebasDashboard } from "../services/conflict-detector.service.js";
+import { reevaluarConflictosDashboard } from "../services/conflict-detector.service.js";
+import { reevaluarConflictosPruebasDashboard } from "../services/conflict-detector-pruebas.service.js";
 import  pool  from "../db/pool.js";
 import { usarRespaldoDesdeHoja } from "../services/sheets-sync.service.js";
 
