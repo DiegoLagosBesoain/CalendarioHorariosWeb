@@ -40,7 +40,7 @@ const BLOQUES_TARDE = [
 
 export async function procesarMaestrosYCrearHorarios(maestrosData) {
   console.log(`[Maestros] Procesando ${maestrosData.length} cursos...`);
-  let contador = { creados: 0, actualizados: 0, errores: 0, omitidos: 0 };
+  const contador = { creados: 0, actualizados: 0, errores: 0, omitidos: 0 };
 
   for (const curso of maestrosData) {
     try {

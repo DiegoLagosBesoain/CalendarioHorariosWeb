@@ -25,7 +25,7 @@ export function calcularHorariosDestino(especialidadesSemestres, horarioSolicita
   if (typeof parsed === 'string') {
     try {
       parsed = JSON.parse(parsed);
-    } catch (_e) {
+    } catch {
       parsed = null;
     }
   }

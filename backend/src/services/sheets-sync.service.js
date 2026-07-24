@@ -125,13 +125,13 @@ function parsearFechaCabecera(cabecera) {
 		return Number.isNaN(date.getTime()) ? null : formatearFechaISO(date);
 	}
 
-	m = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+	m = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
 	if (m) {
 		const date = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
 		return Number.isNaN(date.getTime()) ? null : formatearFechaISO(date);
 	}
 
-	if (!/[\/-]|GMT|UTC|T\d{2}:\d{2}/i.test(raw)) {
+	if (!/[/-]|GMT|UTC|T\d{2}:\d{2}/i.test(raw)) {
 		return null;
 	}
 

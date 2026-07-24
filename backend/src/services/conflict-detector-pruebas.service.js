@@ -139,7 +139,7 @@ async function reevaluarConflictosPruebasDashboard(dashboardId) {
       let bloques = prueba.bloques_horario;
       if (!bloques) continue;
       if (typeof bloques === 'string') {
-        try { bloques = JSON.parse(bloques); } catch(e) { continue; }
+        try { bloques = JSON.parse(bloques); } catch { continue; }
       }
       if (!Array.isArray(bloques) || bloques.length === 0) continue;
 

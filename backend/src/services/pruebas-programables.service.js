@@ -155,7 +155,7 @@ export async function actualizarCalendarioPruebas(dashboardId) {
 
       let especialidades = grupo.especialidades_semestres;
       if (typeof especialidades === 'string') {
-        try { especialidades = JSON.parse(especialidades); } catch (e) { especialidades = {}; }
+        try { especialidades = JSON.parse(especialidades); } catch { especialidades = {}; }
       }
 
       const metaResult = await pool.query(
@@ -234,7 +234,7 @@ export async function actualizarCalendarioPruebas(dashboardId) {
 
       let bloques = pr.bloques_horario;
       if (typeof bloques === 'string') {
-        try { bloques = JSON.parse(bloques); } catch (e) { bloques = []; }
+        try { bloques = JSON.parse(bloques); } catch { bloques = []; }
       }
       if (!Array.isArray(bloques)) bloques = [];
 

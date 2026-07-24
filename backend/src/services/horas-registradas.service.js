@@ -79,53 +79,6 @@ async function eliminar(id) {
 }
 
 /**
- * Limpiar conflictos cuando se elimina una hora
- */
-async function limpiarConflictos(horaRegId) {
-  // Obtener los conflictos de esta hora
-  const result = await pool.query(
-    `SELECT conflictos FROM horas_registradas WHERE id = $1`,
-    [horaRegId]
-  );
-
-  if (result.rows.length === 0) return;
-
-  let conflictos = result.rows[0].conflictos || [];
-  if (typeof conflictos === 'string') {
-    try {
-      conflictos = JSON.parse(conflictos);
-    } catch (e) {
-      conflictos = [];
-    }
-  }
-
-  // Remover horaRegId de los conflictos de todas las horas relacionadas
-  for (const conflictId of conflictos) {
-    const conflictResult = await pool.query(
-      `SELECT conflictos FROM horas_registradas WHERE id = $1`,
-      [conflictId]
-    );
-
-    if (conflictResult.rows.length === 0) continue;
-
-    let conflictosDelOtro = conflictResult.rows[0].conflictos || [];
-    if (typeof conflictosDelOtro === 'string') {
-      try {
-        conflictosDelOtro = JSON.parse(conflictosDelOtro);
-      } catch (e) {
-        conflictosDelOtro = [];
-      }
-    }
-
-    conflictosDelOtro = conflictosDelOtro.filter(id => id !== horaRegId);
-    await pool.query(
-      `UPDATE horas_registradas SET conflictos = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-      [JSON.stringify(conflictosDelOtro), conflictId]
-    );
-  }
-}
-
-/**
  * Eliminar todas las horas registradas de un dashboard
  */
 async function limpiarDashboard(dashboardId) {

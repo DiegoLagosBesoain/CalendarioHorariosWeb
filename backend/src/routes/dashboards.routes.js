@@ -169,7 +169,7 @@ router.patch('/:id/feriados', async (req, res) => {
 
     let feriados = current.rows[0].feriados || [];
     if (typeof feriados === 'string') {
-      try { feriados = JSON.parse(feriados); } catch (e) { feriados = []; }
+      try { feriados = JSON.parse(feriados); } catch { feriados = []; }
     }
 
     // Toggle: si ya existe, quitar; si no, agregar

@@ -18,7 +18,7 @@ export default [
       'no-console': 'off',
       'prefer-const': 'error',
       'no-var': 'error',
-      'eqeqeq': ['error', 'always'],
+      'eqeqeq': ['error', 'smart'],
     },
   },
   {

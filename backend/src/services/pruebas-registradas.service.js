@@ -93,7 +93,7 @@ async function guardarConflictos(pruebaRegId, conflictIds) {
   if (typeof conflictosActuales === 'string') {
     try {
       conflictosActuales = JSON.parse(conflictosActuales);
-    } catch (e) {
+    } catch {
       conflictosActuales = [];
     }
   }
@@ -120,7 +120,7 @@ async function guardarConflictos(pruebaRegId, conflictIds) {
     if (typeof conflictosDelOtro === 'string') {
       try {
         conflictosDelOtro = JSON.parse(conflictosDelOtro);
-      } catch (e) {
+      } catch {
         conflictosDelOtro = [];
       }
     }
@@ -151,7 +151,7 @@ async function limpiarConflictos(pruebaRegId) {
   if (typeof conflictos === 'string') {
     try {
       conflictos = JSON.parse(conflictos);
-    } catch (e) {
+    } catch {
       conflictos = [];
     }
   }
@@ -169,7 +169,7 @@ async function limpiarConflictos(pruebaRegId) {
     if (typeof conflictosDelOtro === 'string') {
       try {
         conflictosDelOtro = JSON.parse(conflictosDelOtro);
-      } catch (e) {
+      } catch {
         conflictosDelOtro = [];
       }
     }

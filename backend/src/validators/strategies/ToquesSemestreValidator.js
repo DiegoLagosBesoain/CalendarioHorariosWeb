@@ -20,7 +20,7 @@ export default {
       if (typeof especialidadesActuales === 'string') {
         try {
           especialidadesActuales = JSON.parse(especialidadesActuales);
-        } catch (e) {
+        } catch {
           especialidadesActuales = {};
         }
       }
@@ -56,7 +56,7 @@ export default {
         if (typeof especialidadesOtras === 'string') {
           try {
             especialidadesOtras = JSON.parse(especialidadesOtras);
-          } catch (e) {
+          } catch {
             especialidadesOtras = {};
           }
         }

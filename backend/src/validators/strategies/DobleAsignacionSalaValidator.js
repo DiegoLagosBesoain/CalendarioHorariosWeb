@@ -18,7 +18,7 @@ export default {
         return { isValid: true };
       }
 
-      const { sala_especial, codigo, seccion, titulo, tipo_hora } = progResult.rows[0];
+      const { sala_especial, _codigo, _seccion, _titulo, _tipo_hora } = progResult.rows[0];
 
       if (!sala_especial) {
         return { isValid: true };

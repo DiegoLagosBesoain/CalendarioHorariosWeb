@@ -22,7 +22,7 @@ export default {
       }
 
       const {
-        profesor_1_id, profesor_2_id, codigo, seccion, titulo,
+        profesor_1_id, profesor_2_id, _codigo, _seccion, _titulo,
         tipo_hora, prof1_nombre, prof2_nombre,
       } = progResult.rows[0];
 

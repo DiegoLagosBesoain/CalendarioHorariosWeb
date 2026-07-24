@@ -150,7 +150,7 @@ async function reevaluarConflictosDashboard(dashboardId) {
       }
     }
 
-    for (const [clave, indices] of Object.entries(bloqueMap)) {
+    for (const [, indices] of Object.entries(bloqueMap)) {
       if (indices.length < 2) continue;
 
       for (let i = 0; i < indices.length; i++) {

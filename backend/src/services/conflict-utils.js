@@ -7,7 +7,7 @@ export function extraerSemestres(especialidades_semestres) {
   if (typeof esp === 'string') {
     try {
       esp = JSON.parse(esp);
-    } catch (e) {
+    } catch {
       return [];
     }
   }

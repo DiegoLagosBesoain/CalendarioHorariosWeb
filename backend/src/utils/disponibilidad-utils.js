@@ -8,7 +8,7 @@ function verificarBloqueEnDisponibilidad(disponibilidad, dia, horaInicio) {
 
   let disp = disponibilidad;
   if (typeof disp === 'string') {
-    try { disp = JSON.parse(disp); } catch (e) {
+    try { disp = JSON.parse(disp); } catch {
       return { disponible: false, razon: 'sin_disponibilidad' };
     }
   }
