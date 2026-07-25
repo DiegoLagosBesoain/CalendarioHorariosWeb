@@ -1,6 +1,8 @@
-import { useState } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useState } from 'react';
 import { authService } from '../services/api';
-import { AuthContext } from './AuthContext.js';
+
+export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
