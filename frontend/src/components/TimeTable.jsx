@@ -26,7 +26,7 @@ export function TimeTable({
   const [conflictingPostits, setConflictingPostits] = useState(new Set());
   const [draggedDisponibilidad, setDraggedDisponibilidad] = useState(null);
   const [operando, setOperando] = useState(false);
-  const [undoVersion, setUndoVersion] = useState(0);
+  const [_undoVersion, setUndoVersion] = useState(0);
 
   // Mapa de bloques: inicio -> rango completo
   const BLOQUES_MAP = {

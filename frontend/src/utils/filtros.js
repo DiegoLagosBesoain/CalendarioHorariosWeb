@@ -25,7 +25,7 @@ function parsearEspecialidades(especialidades_semestres) {
   if (typeof esp === 'string') {
     try {
       esp = JSON.parse(esp);
-    } catch (e) {
+    } catch {
       return [];
     }
   }
@@ -81,7 +81,7 @@ export function filtrarHorario(horario, filtroEspecialidad = 'TODOS', filtroSeme
   if (typeof esp === 'string') {
     try {
       esp = JSON.parse(esp);
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -126,7 +126,7 @@ export function filterForSemester(programable, semestreId) {
   if (typeof esp === 'string') {
     try {
       esp = JSON.parse(esp);
-    } catch (err) {
+    } catch {
       return false;
     }
   }
@@ -164,7 +164,7 @@ export function determinarSemestre(programable) {
   if (typeof esp === 'string') {
     try {
       esp = JSON.parse(esp);
-    } catch (err) {
+    } catch {
       return 'plan_comun';
     }
   }

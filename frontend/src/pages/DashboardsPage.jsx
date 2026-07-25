@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { dashboardService } from '../services/api';
 import '../styles/Dashboards.css';
 
@@ -17,20 +17,19 @@ export function DashboardsPage() {
   const [editName, setEditName] = useState('');
 
   useEffect(() => {
+    const loadDashboards = async () => {
+      try {
+        setLoading(true);
+        const data = await dashboardService.getDashboards(user.id);
+        setDashboards(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
     loadDashboards();
-  }, []);
-
-  const loadDashboards = async () => {
-    try {
-      setLoading(true);
-      const data = await dashboardService.getDashboards(user.id);
-      setDashboards(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [user.id]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
