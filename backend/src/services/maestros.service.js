@@ -36,6 +36,15 @@ const ALIAS_DISTRIBUCION = [
   "DIST",
 ];
 
+// Nombres de columna de sala especial según el tipo de hora. La columna
+// genérica "Sala especial" puede traer restricciones, no salas reales, por lo
+// que no se usa para determinar conflictos de sala.
+const ALIAS_SALA = {
+  "CLASE": ["SALA ESPECIAL CLAS", "SALA ESPECIAL CLASE", "SALA ESPECIAL CLASES"],
+  "AYUDANTIA": ["SALA ESPECIAL AYUD", "SALA ESPECIAL AYUDANTIA", "SALA ESPECIAL AYUDANTIAS"],
+  "LAB/TALLER": ["SALA ESPECIAL LAB", "SALA ESPECIAL LABORATORIO", "SALA ESPECIAL LABORATORIOS", "SALA ESPECIAL TALLER"],
+};
+
 const BLOQUES_EXAMEN = [
   { inicio: "8:30", fin: "10:20" },
   { inicio: "9:30", fin: "11:20" },
@@ -113,11 +122,6 @@ export async function procesarMaestrosYCrearHorarios(maestrosData, periodo) {
       const especialidades = extraerEspecialidades(curso);
       const disponibilidad = extraerDisponibilidad(curso);
 
-      let salaEspecial = null;
-      if (buscarColumna(curso, "SALA", "SALA ESPECIAL", "SALA_ESPECIAL") != null) {
-        salaEspecial = limpiarSala(buscarColumna(curso, "SALA", "SALA ESPECIAL", "SALA_ESPECIAL"));
-      }
-
       for (const tipoHora of TIPOS_HORA) {
         const cantidadHorasCol = buscarColumna(curso, ...ALIAS_CANTIDAD[tipoHora]);
         const cantidadHorasTexto = cantidadHorasCol != null ? String(cantidadHorasCol).trim() : '';
@@ -134,6 +138,7 @@ export async function procesarMaestrosYCrearHorarios(maestrosData, periodo) {
           ...ALIAS_DISTRIBUCION
         );
         const distribucionHorario = distribucionStr ? String(distribucionStr).trim() : null;
+        const salaEspecial = limpiarSala(buscarColumna(curso, ...ALIAS_SALA[tipoHora]));
 
         await crearHorarioProgramable(
           codigo, seccion, tipoHora, cantidadHoras,

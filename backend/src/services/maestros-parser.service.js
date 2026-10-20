@@ -54,8 +54,12 @@ export function primerValorNoVacio(...valores) {
 }
 
 export function limpiarSala(v) {
-  if (v == null || String(v).trim() === '') return null;
-  return String(v).trim();
+  if (v == null) return null;
+  const texto = String(v).trim();
+  if (!texto) return null;
+  // Errores de planilla u otros marcadores que no son salas reales
+  if (/^(#N\/A|#REF!|#VALUE!|#DIV\/0!|N\/A|-|—)$/i.test(texto)) return null;
+  return texto;
 }
 
 export function limpiarNumeroSemestre(semestre) {
