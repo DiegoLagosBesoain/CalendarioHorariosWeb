@@ -1,39 +1,115 @@
 import { verificarBloqueEnDisponibilidad } from '../utils/disponibilidad-utils.js';
 
-export function extraerSemestres(especialidades_semestres) {
+const PLAN_COMUN = 'PLAN COMUN';
+
+function normalizarNombreEspecialidad(valor) {
+  return String(valor ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
+}
+
+function normalizarSemestre(valor) {
+  if (valor == null) return null;
+  if (typeof valor === 'number') return Number.isFinite(valor) ? Math.floor(valor) : null;
+  const num = parseInt(String(valor).replace(/[^0-9]/g, ''), 10);
+  return Number.isNaN(num) ? null : num;
+}
+
+/**
+ * Extrae pares (especialidad, semestre) desde especialidades_semestres.
+ * Soporta { ICI: 5, 'PLAN COMUN': [2, 3] } y [{ nombre: 'ICI', semestre: 5 }].
+ */
+export function extraerParesEspecialidadSemestre(especialidades_semestres) {
   if (!especialidades_semestres) return [];
 
   let esp = especialidades_semestres;
   if (typeof esp === 'string') {
-    try {
-      esp = JSON.parse(esp);
-    } catch {
-      return [];
+    try { esp = JSON.parse(esp); } catch { return []; }
+  }
+
+  const pares = [];
+
+  if (Array.isArray(esp)) {
+    for (const item of esp) {
+      if (item && typeof item === 'object' && item.nombre != null) {
+        const especialidad = normalizarNombreEspecialidad(item.nombre);
+        const semestre = normalizarSemestre(item.semestre);
+        if (especialidad && semestre != null) {
+          pares.push({ especialidad, semestre });
+        }
+      } else {
+        const semestre = normalizarSemestre(item);
+        if (semestre != null) {
+          pares.push({ especialidad: '', semestre });
+        }
+      }
+    }
+    return pares;
+  }
+
+  if (typeof esp === 'object') {
+    for (const [nombreRaw, valor] of Object.entries(esp)) {
+      const especialidad = normalizarNombreEspecialidad(nombreRaw);
+      if (!especialidad) continue;
+
+      const valores = Array.isArray(valor) ? valor : [valor];
+      for (const v of valores) {
+        const semestre = normalizarSemestre(v);
+        if (semestre != null) {
+          pares.push({ especialidad, semestre });
+        }
+      }
     }
   }
 
-  let semestres = [];
+  return pares;
+}
 
-  if (Array.isArray(esp)) {
-    semestres = esp.map(e => {
-      const sem = e.semestre || e;
-      if (typeof sem === 'string') {
-        const num = parseInt(sem.replace(/[^0-9]/g, ''), 10);
-        return isNaN(num) ? null : num;
-      }
-      return sem;
-    }).filter(s => s !== null);
-  } else if (typeof esp === 'object') {
-    semestres = Object.values(esp).flat().map(sem => {
-      if (typeof sem === 'string') {
-        const num = parseInt(sem.replace(/[^0-9]/g, ''), 10);
-        return isNaN(num) ? null : num;
-      }
-      return sem;
-    }).filter(s => s !== null);
+/**
+ * Compara los semestres de dos cursos considerando la carrera:
+ * - choque si comparten una pareja (carrera, semestre)
+ * - choque si uno tiene Plan Común en un semestre y el otro tiene alguna
+ *   carrera en ese mismo semestre (Plan Común transversal)
+ */
+export function conflictosDeSemestre(esp1, esp2) {
+  const pares1 = extraerParesEspecialidadSemestre(esp1);
+  const pares2 = extraerParesEspecialidadSemestre(esp2);
+
+  const clavePar = (p) => `${p.especialidad}|${p.semestre}`;
+  const pares2Set = new Set(pares2.map(clavePar));
+
+  const paresComunes = [];
+  const vistos = new Set();
+  for (const par of pares1) {
+    const clave = clavePar(par);
+    if (pares2Set.has(clave) && !vistos.has(clave)) {
+      vistos.add(clave);
+      paresComunes.push(par);
+    }
   }
 
-  return semestres;
+  const semestres1 = new Set(pares1.map(p => p.semestre));
+  const semestres2 = new Set(pares2.map(p => p.semestre));
+  const planComun1 = new Set(
+    pares1.filter(p => p.especialidad === PLAN_COMUN).map(p => p.semestre)
+  );
+  const planComun2 = new Set(
+    pares2.filter(p => p.especialidad === PLAN_COMUN).map(p => p.semestre)
+  );
+
+  const semestresPlanComun = [...new Set([
+    ...[...planComun1].filter(s => semestres2.has(s)),
+    ...[...planComun2].filter(s => semestres1.has(s)),
+  ])];
+
+  return {
+    hayConflicto: paresComunes.length > 0 || semestresPlanComun.length > 0,
+    paresComunes,
+    semestresPlanComun,
+  };
 }
 
 export function tieneConflictoDisponibilidad(hora) {

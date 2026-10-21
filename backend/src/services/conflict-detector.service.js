@@ -1,5 +1,5 @@
 import  pool  from '../db/pool.js';
-import { extraerSemestres, tieneConflictoDisponibilidad } from './conflict-utils.js';
+import { conflictosDeSemestre, tieneConflictoDisponibilidad } from './conflict-utils.js';
 
 async function reevaluarConflictosDashboard(dashboardId) {
   try {
@@ -90,11 +90,12 @@ async function reevaluarConflictosDashboard(dashboardId) {
             continue;
           }
 
-          const semestres1 = extraerSemestres(hora1.especialidades_semestres);
-          const semestres2 = extraerSemestres(hora2.especialidades_semestres);
-          const semestresComunes = semestres1.filter(s => semestres2.includes(s));
+          const { hayConflicto } = conflictosDeSemestre(
+            hora1.especialidades_semestres,
+            hora2.especialidades_semestres
+          );
 
-          if (semestresComunes.length > 0) {
+          if (hayConflicto) {
             agregarConflicto(hora1.hora_reg_id, hora2.hora_reg_id, 'semestre');
           }
         }
@@ -242,10 +243,11 @@ function compararItemConOtros(item, otros) {
       item.horario === otro.horario &&
       item.codigo !== otro.codigo
     ) {
-      const sem1 = extraerSemestres(item.especialidades_semestres);
-      const sem2 = extraerSemestres(otro.especialidades_semestres);
-      const comunes = sem1.filter(s => sem2.includes(s));
-      if (comunes.length > 0) {
+      const { hayConflicto } = conflictosDeSemestre(
+        item.especialidades_semestres,
+        otro.especialidades_semestres
+      );
+      if (hayConflicto) {
         agregarConflictoIncremental(item.hora_reg_id, otro.hora_reg_id, 'semestre');
       }
     }

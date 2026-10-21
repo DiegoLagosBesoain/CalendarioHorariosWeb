@@ -1,6 +1,6 @@
 import pool from '../db/pool.js';
 import { normalizarHora } from '../utils/horario-utils.js';
-import { extraerSemestres } from './conflict-utils.js';
+import { conflictosDeSemestre } from './conflict-utils.js';
 
 const diasSemanaMap = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -79,12 +79,12 @@ async function reevaluarConflictosPruebasDashboard(dashboardId) {
             continue;
           }
 
-          const semestres1 = extraerSemestres(prueba1.especialidades_semestres);
-          const semestres2 = extraerSemestres(prueba2.especialidades_semestres);
+          const { hayConflicto } = conflictosDeSemestre(
+            prueba1.especialidades_semestres,
+            prueba2.especialidades_semestres
+          );
 
-          const semestresComunes = semestres1.filter(s => semestres2.includes(s));
-
-          if (semestresComunes.length > 0) {
+          if (hayConflicto) {
             if (!conflictosPorPrueba[prueba1.prueba_reg_id]) {
               conflictosPorPrueba[prueba1.prueba_reg_id] = [];
             }

@@ -1,4 +1,5 @@
 import pool from '../../db/pool.js';
+import { conflictosDeSemestre } from '../../services/conflict-utils.js';
 
 export default {
   nombre: 'toques_de_semestre',
@@ -15,26 +16,6 @@ export default {
       }
 
       const horaProgramableActual = progResult.rows[0];
-      let especialidadesActuales = horaProgramableActual.especialidades_semestres;
-
-      if (typeof especialidadesActuales === 'string') {
-        try {
-          especialidadesActuales = JSON.parse(especialidadesActuales);
-        } catch {
-          especialidadesActuales = {};
-        }
-      }
-
-      let semestresActuales = [];
-      if (Array.isArray(especialidadesActuales)) {
-        semestresActuales = especialidadesActuales.map(e => e.semestre || e).filter(s => s);
-      } else if (typeof especialidadesActuales === 'object') {
-        semestresActuales = Object.values(especialidadesActuales).filter(s => s);
-      }
-
-      if (semestresActuales.length === 0) {
-        return { isValid: true };
-      }
 
       const horasResult = await pool.query(
         `SELECT hr.id, hp.codigo, hp.seccion, hp.especialidades_semestres
@@ -52,50 +33,52 @@ export default {
           continue;
         }
 
-        let especialidadesOtras = row.especialidades_semestres;
-        if (typeof especialidadesOtras === 'string') {
-          try {
-            especialidadesOtras = JSON.parse(especialidadesOtras);
-          } catch {
-            especialidadesOtras = {};
+        const { hayConflicto, paresComunes, semestresPlanComun } = conflictosDeSemestre(
+          horaProgramableActual.especialidades_semestres,
+          row.especialidades_semestres
+        );
+
+        if (!hayConflicto) {
+          continue;
+        }
+
+        const prog1Result = await pool.query(
+          `SELECT titulo FROM horas_programables WHERE id = $1`,
+          [horaProgramableId]
+        );
+        const prog1Title = prog1Result.rows[0]?.titulo || horaProgramableActual.codigo;
+
+        const prog2Result = await pool.query(
+          `SELECT titulo FROM horas_programables WHERE id = (SELECT hora_programable_id FROM horas_registradas WHERE id = $1)`,
+          [row.id]
+        );
+        const prog2Title = prog2Result.rows[0]?.titulo || row.codigo;
+
+        const detalles = [];
+        for (const par of paresComunes) {
+          detalles.push(`${par.especialidad} semestre ${par.semestre}`);
+        }
+        for (const semestre of semestresPlanComun) {
+          if (!paresComunes.some(p => p.semestre === semestre)) {
+            detalles.push(`semestre ${semestre} (Plan Común transversal)`);
           }
         }
 
-        let semestresOtras = [];
-        if (Array.isArray(especialidadesOtras)) {
-          semestresOtras = especialidadesOtras.map(e => e.semestre || e).filter(s => s);
-        } else if (typeof especialidadesOtras === 'object') {
-          semestresOtras = Object.values(especialidadesOtras).filter(s => s);
-        }
+        const semestresInvolucrados = [...new Set([
+          ...paresComunes.map(p => p.semestre),
+          ...semestresPlanComun,
+        ])];
 
-        const semestresComunes = semestresActuales.filter(s =>
-          semestresOtras.includes(s)
-        );
-
-        if (semestresComunes.length > 0) {
-          const prog1Result = await pool.query(
-            `SELECT titulo FROM horas_programables WHERE id = $1`,
-            [horaProgramableId]
-          );
-          const prog1Title = prog1Result.rows[0]?.titulo || horaProgramableActual.codigo;
-
-          const prog2Result = await pool.query(
-            `SELECT titulo FROM horas_programables WHERE id = (SELECT hora_programable_id FROM horas_registradas WHERE id = $1)`,
-            [row.id]
-          );
-          const prog2Title = prog2Result.rows[0]?.titulo || row.codigo;
-
-          return {
-            isValid: false,
-            warning: `⚠️ Conflicto de horario: ${prog1Title} Sección ${horaProgramableActual.seccion} está tocando con ${prog2Title} Sección ${row.seccion} en el semestre ${semestresComunes.join(', ')}.`,
-            conflictingHoraRegId: row.id,
-            conflictingCourses: [
-              { codigo: horaProgramableActual.codigo, seccion: horaProgramableActual.seccion, horaProgId: horaProgramableId },
-              { codigo: row.codigo, seccion: row.seccion, horaRegId: row.id }
-            ],
-            conflictingSemesters: semestresComunes,
-          };
-        }
+        return {
+          isValid: false,
+          warning: `⚠️ Conflicto de horario: ${prog1Title} Sección ${horaProgramableActual.seccion} está tocando con ${prog2Title} Sección ${row.seccion} en ${detalles.join(', ')}.`,
+          conflictingHoraRegId: row.id,
+          conflictingCourses: [
+            { codigo: horaProgramableActual.codigo, seccion: horaProgramableActual.seccion, horaProgId: horaProgramableId },
+            { codigo: row.codigo, seccion: row.seccion, horaRegId: row.id }
+          ],
+          conflictingSemesters: semestresInvolucrados,
+        };
       }
 
       return { isValid: true };
