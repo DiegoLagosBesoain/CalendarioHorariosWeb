@@ -1,7 +1,5 @@
 import { verificarBloqueEnDisponibilidad } from '../utils/disponibilidad-utils.js';
 
-const PLAN_COMUN = 'PLAN COMUN';
-
 function normalizarNombreEspecialidad(valor) {
   return String(valor ?? '')
     .trim()
@@ -70,9 +68,7 @@ export function extraerParesEspecialidadSemestre(especialidades_semestres) {
 
 /**
  * Compara los semestres de dos cursos considerando la carrera:
- * - choque si comparten una pareja (carrera, semestre)
- * - choque si uno tiene Plan Común en un semestre y el otro tiene alguna
- *   carrera en ese mismo semestre (Plan Común transversal)
+ * hay choque solo si comparten una pareja (carrera, semestre).
  */
 export function conflictosDeSemestre(esp1, esp2) {
   const pares1 = extraerParesEspecialidadSemestre(esp1);
@@ -91,24 +87,9 @@ export function conflictosDeSemestre(esp1, esp2) {
     }
   }
 
-  const semestres1 = new Set(pares1.map(p => p.semestre));
-  const semestres2 = new Set(pares2.map(p => p.semestre));
-  const planComun1 = new Set(
-    pares1.filter(p => p.especialidad === PLAN_COMUN).map(p => p.semestre)
-  );
-  const planComun2 = new Set(
-    pares2.filter(p => p.especialidad === PLAN_COMUN).map(p => p.semestre)
-  );
-
-  const semestresPlanComun = [...new Set([
-    ...[...planComun1].filter(s => semestres2.has(s)),
-    ...[...planComun2].filter(s => semestres1.has(s)),
-  ])];
-
   return {
-    hayConflicto: paresComunes.length > 0 || semestresPlanComun.length > 0,
+    hayConflicto: paresComunes.length > 0,
     paresComunes,
-    semestresPlanComun,
   };
 }
 

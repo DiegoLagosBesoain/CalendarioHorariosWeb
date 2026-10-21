@@ -33,7 +33,7 @@ export default {
           continue;
         }
 
-        const { hayConflicto, paresComunes, semestresPlanComun } = conflictosDeSemestre(
+        const { hayConflicto, paresComunes } = conflictosDeSemestre(
           horaProgramableActual.especialidades_semestres,
           row.especialidades_semestres
         );
@@ -58,16 +58,8 @@ export default {
         for (const par of paresComunes) {
           detalles.push(`${par.especialidad} semestre ${par.semestre}`);
         }
-        for (const semestre of semestresPlanComun) {
-          if (!paresComunes.some(p => p.semestre === semestre)) {
-            detalles.push(`semestre ${semestre} (Plan Común transversal)`);
-          }
-        }
 
-        const semestresInvolucrados = [...new Set([
-          ...paresComunes.map(p => p.semestre),
-          ...semestresPlanComun,
-        ])];
+        const semestresInvolucrados = [...new Set(paresComunes.map(p => p.semestre))];
 
         return {
           isValid: false,

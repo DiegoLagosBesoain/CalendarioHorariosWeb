@@ -46,14 +46,13 @@ describe('conflictosDeSemestre', () => {
     expect(resultado.paresComunes).toContainEqual({ especialidad: 'ICE', semestre: 5 });
   });
 
-  it('Plan Común es transversal a cualquier carrera del mismo semestre', () => {
+  it('Plan Común no choca con carreras distintas', () => {
     const resultado = conflictosDeSemestre(
       { 'PLAN COMUN': 4 },
       { ICI: 4 }
     );
 
-    expect(resultado.hayConflicto).toBe(true);
-    expect(resultado.semestresPlanComun).toContain(4);
+    expect(resultado.hayConflicto).toBe(false);
   });
 
   it('Plan Común choca con Plan Común', () => {
