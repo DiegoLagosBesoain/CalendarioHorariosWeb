@@ -1,3 +1,5 @@
+import { normalizarSemestreToken } from '../utils/horario-utils.js';
+
 const ESPECIALIDADES_VALIDAS = ["PLAN COMUN", "PLAN_COMUN", "ICA", "ICQ", "ICI", "IOC", "ICE", "ICC"];
 
 export function normalizarTexto(valor) {
@@ -87,8 +89,8 @@ export function extraerEspecialidades(curso) {
     if (especialidad) {
       const valor = curso[key];
       if (valor != null && String(valor).trim() !== '') {
-        const semestre = limpiarNumeroSemestre(valor);
-        if (semestre !== null && semestre !== 0) {
+        const semestre = normalizarSemestreToken(valor);
+        if (semestre !== null && parseInt(semestre, 10) > 0) {
           especialidades[especialidad] = semestre;
         }
       }

@@ -73,3 +73,28 @@ export function limpiarNumeroSemestre(semestre) {
   const num = parseInt(String(semestre).replace(/[^0-9]/g, ''), 10);
   return isNaN(num) ? null : num;
 }
+
+/**
+ * Normaliza un semestre conservando la mención que venga después del número.
+ * "10a" -> "10A", "10" -> "10", "10 analytics" -> "10ANALYTICS".
+ * Si no calza con número + letras, cae al comportamiento anterior (solo dígitos).
+ */
+export function normalizarSemestreToken(semestre) {
+  if (semestre === null || semestre === undefined) return null;
+
+  if (typeof semestre === 'number') {
+    if (!Number.isFinite(semestre)) return null;
+    return String(Math.floor(semestre));
+  }
+
+  const texto = normalizarTexto(semestre).replace(/[\s_-]+/g, '');
+  const match = texto.match(/^(\d+)([A-Z]+)?$/);
+
+  if (match) {
+    const numero = parseInt(match[1], 10);
+    return `${numero}${match[2] || ''}`;
+  }
+
+  const numero = limpiarNumeroSemestre(semestre);
+  return numero === null ? null : String(numero);
+}

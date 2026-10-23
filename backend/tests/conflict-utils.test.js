@@ -11,17 +11,27 @@ describe('extraerParesEspecialidadSemestre', () => {
       'PLAN COMUN': [2, 3],
     });
 
-    expect(pares).toContainEqual({ especialidad: 'ICI', semestre: 5 });
-    expect(pares).toContainEqual({ especialidad: 'PLAN COMUN', semestre: 2 });
-    expect(pares).toContainEqual({ especialidad: 'PLAN COMUN', semestre: 3 });
+    expect(pares).toContainEqual({ especialidad: 'ICI', semestre: '5' });
+    expect(pares).toContainEqual({ especialidad: 'PLAN COMUN', semestre: '2' });
+    expect(pares).toContainEqual({ especialidad: 'PLAN COMUN', semestre: '3' });
   });
 
-  it('lee el formato array y normaliza "5to"', () => {
+  it('lee el formato array', () => {
     const pares = extraerParesEspecialidadSemestre([
-      { nombre: 'ice', semestre: '5to' },
+      { nombre: 'ice', semestre: '5' },
     ]);
 
-    expect(pares).toEqual([{ especialidad: 'ICE', semestre: 5 }]);
+    expect(pares).toEqual([{ especialidad: 'ICE', semestre: '5' }]);
+  });
+
+  it('conserva la mención del semestre', () => {
+    const pares = extraerParesEspecialidadSemestre({
+      ICI: '10a',
+      IOC: '10analytics',
+    });
+
+    expect(pares).toContainEqual({ especialidad: 'ICI', semestre: '10A' });
+    expect(pares).toContainEqual({ especialidad: 'IOC', semestre: '10ANALYTICS' });
   });
 
   it('devuelve vacio para datos invalidos', () => {
@@ -43,10 +53,10 @@ describe('conflictosDeSemestre', () => {
     );
 
     expect(resultado.hayConflicto).toBe(true);
-    expect(resultado.paresComunes).toContainEqual({ especialidad: 'ICE', semestre: 5 });
+    expect(resultado.paresComunes).toContainEqual({ especialidad: 'ICE', semestre: '5' });
   });
 
-  it('Plan Común no choca con carreras distintas', () => {
+  it('plan comun no choca con carreras distintas', () => {
     const resultado = conflictosDeSemestre(
       { 'PLAN COMUN': 4 },
       { ICI: 4 }
@@ -55,7 +65,7 @@ describe('conflictosDeSemestre', () => {
     expect(resultado.hayConflicto).toBe(false);
   });
 
-  it('Plan Común choca con Plan Común', () => {
+  it('plan comun choca con plan comun', () => {
     const resultado = conflictosDeSemestre(
       { 'PLAN COMUN': 4 },
       { 'PLAN COMUN': 4 }
@@ -70,5 +80,29 @@ describe('conflictosDeSemestre', () => {
 
   it('no marca cursos sin especialidades', () => {
     expect(conflictosDeSemestre(null, { ICI: 5 }).hayConflicto).toBe(false);
+  });
+
+  it('mantiene el choque comun vs comun', () => {
+    expect(conflictosDeSemestre({ ICI: 10 }, { ICI: 10 }).hayConflicto).toBe(true);
+  });
+
+  it('distingue menciones distintas del mismo semestre', () => {
+    expect(conflictosDeSemestre({ ICI: '10a' }, { ICI: '10b' }).hayConflicto).toBe(false);
+    expect(conflictosDeSemestre({ ICI: '10analytics' }, { ICI: '10b' }).hayConflicto).toBe(false);
+  });
+
+  it('el curso comun choca con una mencion de su carrera', () => {
+    expect(conflictosDeSemestre({ ICI: '10' }, { ICI: '10a' }).hayConflicto).toBe(true);
+    expect(conflictosDeSemestre({ ICI: '10a' }, { ICI: '10' }).hayConflicto).toBe(true);
+    expect(conflictosDeSemestre({ ICI: '10' }, { ICI: '10analytics' }).hayConflicto).toBe(true);
+  });
+
+  it('la misma mencion choca sin importar mayusculas', () => {
+    expect(conflictosDeSemestre({ ICI: '10a' }, { ICI: '10A' }).hayConflicto).toBe(true);
+    expect(conflictosDeSemestre({ ICI: '10a' }, { ICI: '10a' }).hayConflicto).toBe(true);
+  });
+
+  it('no choca con una mencion de otra carrera', () => {
+    expect(conflictosDeSemestre({ ICI: '10a' }, { IOC: '10a' }).hayConflicto).toBe(false);
   });
 });

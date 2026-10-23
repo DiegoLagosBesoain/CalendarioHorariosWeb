@@ -4,6 +4,7 @@ import {
   normalizarTexto,
   calcularHorariosDestino,
   limpiarNumeroSemestre,
+  normalizarSemestreToken,
 } from '../src/utils/horario-utils.js';
 
 describe('normalizarHora', () => {
@@ -45,6 +46,26 @@ describe('limpiarNumeroSemestre', () => {
   it('procesa numeros directamente', () => {
     expect(limpiarNumeroSemestre(7)).toBe(7);
     expect(limpiarNumeroSemestre(7.5)).toBe(7);
+  });
+});
+
+describe('normalizarSemestreToken', () => {
+  it('conserva y normaliza la mencion', () => {
+    expect(normalizarSemestreToken('10a')).toBe('10A');
+    expect(normalizarSemestreToken('10A')).toBe('10A');
+    expect(normalizarSemestreToken('10 analytics')).toBe('10ANALYTICS');
+    expect(normalizarSemestreToken('10-A')).toBe('10A');
+  });
+
+  it('mantiene el comportamiento para numeros', () => {
+    expect(normalizarSemestreToken('10')).toBe('10');
+    expect(normalizarSemestreToken(10)).toBe('10');
+    expect(normalizarSemestreToken('semestre 11')).toBe('11');
+  });
+
+  it('devuelve null si no hay numero', () => {
+    expect(normalizarSemestreToken('abc')).toBeNull();
+    expect(normalizarSemestreToken(null)).toBeNull();
   });
 });
 

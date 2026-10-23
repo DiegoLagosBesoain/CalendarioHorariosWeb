@@ -1,4 +1,5 @@
 import { verificarBloqueEnDisponibilidad } from '../utils/disponibilidad-utils.js';
+import { normalizarSemestreToken } from '../utils/horario-utils.js';
 
 function normalizarNombreEspecialidad(valor) {
   return String(valor ?? '')
@@ -9,16 +10,29 @@ function normalizarNombreEspecialidad(valor) {
     .replace(/\s+/g, ' ');
 }
 
-function normalizarSemestre(valor) {
-  if (valor == null) return null;
-  if (typeof valor === 'number') return Number.isFinite(valor) ? Math.floor(valor) : null;
-  const num = parseInt(String(valor).replace(/[^0-9]/g, ''), 10);
-  return Number.isNaN(num) ? null : num;
+/**
+ * Separa un token de semestre en número + mención (sufijo).
+ * "10" -> { numero: 10, sufijo: '' }
+ * "10A" -> { numero: 10, sufijo: 'A' }
+ * "10ANALYTICS" -> { numero: 10, sufijo: 'ANALYTICS' }
+ */
+function parseSemestreToken(valor) {
+  const token = normalizarSemestreToken(valor);
+  if (token == null) return null;
+
+  const match = token.match(/^(\d+)([A-Z]*)$/);
+  if (!match) return null;
+
+  return {
+    numero: parseInt(match[1], 10),
+    sufijo: match[2] || '',
+  };
 }
 
 /**
  * Extrae pares (especialidad, semestre) desde especialidades_semestres.
- * Soporta { ICI: 5, 'PLAN COMUN': [2, 3] } y [{ nombre: 'ICI', semestre: 5 }].
+ * El semestre se guarda como token que conserva la mención: "10A", "10", etc.
+ * Soporta { ICI: '10a', 'PLAN COMUN': [2, 3] } y [{ nombre: 'ICI', semestre: '10a' }].
  */
 export function extraerParesEspecialidadSemestre(especialidades_semestres) {
   if (!especialidades_semestres) return [];
@@ -34,12 +48,12 @@ export function extraerParesEspecialidadSemestre(especialidades_semestres) {
     for (const item of esp) {
       if (item && typeof item === 'object' && item.nombre != null) {
         const especialidad = normalizarNombreEspecialidad(item.nombre);
-        const semestre = normalizarSemestre(item.semestre);
+        const semestre = normalizarSemestreToken(item.semestre);
         if (especialidad && semestre != null) {
           pares.push({ especialidad, semestre });
         }
       } else {
-        const semestre = normalizarSemestre(item);
+        const semestre = normalizarSemestreToken(item);
         if (semestre != null) {
           pares.push({ especialidad: '', semestre });
         }
@@ -55,7 +69,7 @@ export function extraerParesEspecialidadSemestre(especialidades_semestres) {
 
       const valores = Array.isArray(valor) ? valor : [valor];
       for (const v of valores) {
-        const semestre = normalizarSemestre(v);
+        const semestre = normalizarSemestreToken(v);
         if (semestre != null) {
           pares.push({ especialidad, semestre });
         }
@@ -67,23 +81,36 @@ export function extraerParesEspecialidadSemestre(especialidades_semestres) {
 }
 
 /**
- * Compara los semestres de dos cursos considerando la carrera:
- * hay choque solo si comparten una pareja (carrera, semestre).
+ * Compara los semestres de dos cursos considerando carrera y mención:
+ * - mismo número de semestre y misma carrera
+ * - y (algún lado sin mención o la misma mención)
+ * El semestre sin mención ("10") es transversal a las menciones de su carrera.
  */
 export function conflictosDeSemestre(esp1, esp2) {
   const pares1 = extraerParesEspecialidadSemestre(esp1);
   const pares2 = extraerParesEspecialidadSemestre(esp2);
 
-  const clavePar = (p) => `${p.especialidad}|${p.semestre}`;
-  const pares2Set = new Set(pares2.map(clavePar));
-
   const paresComunes = [];
   const vistos = new Set();
-  for (const par of pares1) {
-    const clave = clavePar(par);
-    if (pares2Set.has(clave) && !vistos.has(clave)) {
+
+  for (const a of pares1) {
+    const semA = parseSemestreToken(a.semestre);
+    if (!semA) continue;
+
+    for (const b of pares2) {
+      if (a.especialidad !== b.especialidad) continue;
+
+      const semB = parseSemestreToken(b.semestre);
+      if (!semB) continue;
+      if (semA.numero !== semB.numero) continue;
+      if (semA.sufijo && semB.sufijo && semA.sufijo !== semB.sufijo) continue;
+
+      const token = semA.sufijo ? a.semestre : b.semestre;
+      const clave = `${a.especialidad}|${token}`;
+      if (vistos.has(clave)) continue;
+
       vistos.add(clave);
-      paresComunes.push(par);
+      paresComunes.push({ especialidad: a.especialidad, semestre: token });
     }
   }
 
