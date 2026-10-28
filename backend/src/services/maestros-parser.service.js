@@ -130,16 +130,21 @@ export function extraerEspecialidades(curso) {
   return especialidades;
 }
 
+const PREFIJO_HORARIO_DICTADO = /^(CLASE|CLAS|AYUDANTIA|AYUD|LABORATORIO|LAB|TALLER)\b/i;
+
 export function extraerDisponibilidad(curso) {
   const disponibilidad = {};
 
-  const diasColumnas = ['LUNES', 'MARTES', 'MIÉRCOLES', 'MIERCOLES', 'JUEVES', 'VIERNES'];
-  const diaNombres = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+  const dias = [
+    { nombre: 'Lunes', colKey: 'BLOQUES_DIA_1', columna: 'LUNES' },
+    { nombre: 'Martes', colKey: 'BLOQUES_DIA_2', columna: 'MARTES' },
+    { nombre: 'Miércoles', colKey: 'BLOQUES_DIA_3', columna: 'MIERCOLES' },
+    { nombre: 'Jueves', colKey: 'BLOQUES_DIA_4', columna: 'JUEVES' },
+    { nombre: 'Viernes', colKey: 'BLOQUES_DIA_5', columna: 'VIERNES' },
+  ];
 
-  for (let i = 0; i < diasColumnas.length; i++) {
-    const idx = i >= 4 ? i - 1 : i;
-    const colKey = `BLOQUES_DIA_${idx + 1}`;
-    const valor = buscarColumna(curso, colKey, diasColumnas[i]);
+  for (const { nombre, colKey, columna } of dias) {
+    const valor = buscarColumna(curso, colKey, columna);
 
     if (valor == null || String(valor).trim() === '') {
       continue;
@@ -148,10 +153,10 @@ export function extraerDisponibilidad(curso) {
     const bloques = String(valor)
       .split(',')
       .map(b => b.trim())
-      .filter(b => b.length > 0);
+      .filter(b => b.length > 0 && !PREFIJO_HORARIO_DICTADO.test(b));
 
     if (bloques.length > 0) {
-      disponibilidad[diaNombres[idx]] = bloques;
+      disponibilidad[nombre] = bloques;
     }
   }
 

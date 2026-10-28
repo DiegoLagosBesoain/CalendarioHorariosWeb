@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   extraerEspecialidades,
+  extraerDisponibilidad,
   extraerProfesorLab,
   elegirProfesoresHora,
 } from '../src/services/maestros-parser.service.js';
@@ -31,6 +32,72 @@ describe('extraerEspecialidades', () => {
     });
 
     expect(especialidades).toEqual({});
+  });
+});
+
+describe('extraerDisponibilidad', () => {
+  it('no confunde la disponibilidad de miercoles con jueves', () => {
+    const disponibilidad = extraerDisponibilidad({
+      LUNES: '',
+      MARTES: '17:30-18:20,18:30-19:20',
+      MIERCOLES: '17:30-18:20,18:30-19:20',
+      JUEVES: '',
+      VIERNES: '',
+      Lunes: 'LAB/TALLER 13:30-15:20',
+      Martes: '',
+      Miercoles: '',
+      Jueves: 'CLAS 17:30-19:20',
+      Viernes: '',
+    });
+
+    expect(disponibilidad).toEqual({
+      Martes: ['17:30-18:20', '18:30-19:20'],
+      Miércoles: ['17:30-18:20', '18:30-19:20'],
+    });
+  });
+
+  it('lee el jueves real y el alias con tilde de miercoles', () => {
+    const disponibilidad = extraerDisponibilidad({
+      LUNES: '',
+      MARTES: '',
+      MIÉRCOLES: '10:30-11:20',
+      JUEVES: '8:30-9:20,9:30-10:20',
+      VIERNES: '',
+    });
+
+    expect(disponibilidad).toEqual({
+      Miércoles: ['10:30-11:20'],
+      Jueves: ['8:30-9:20', '9:30-10:20'],
+    });
+  });
+
+  it('mantiene el alias BLOQUES_DIA_N', () => {
+    const disponibilidad = extraerDisponibilidad({
+      BLOQUES_DIA_4: '15:30-16:20',
+    });
+
+    expect(disponibilidad).toEqual({
+      Jueves: ['15:30-16:20'],
+    });
+  });
+
+  it('ignora las columnas de horario dictado', () => {
+    const disponibilidad = extraerDisponibilidad({
+      Jueves: 'CLAS 17:30-19:20',
+      Lunes: 'LAB/TALLER 13:30-15:20',
+    });
+
+    expect(disponibilidad).toEqual({});
+  });
+
+  it('mantiene valores que no son horario dictado', () => {
+    const disponibilidad = extraerDisponibilidad({
+      JUEVES: 'INCOHERENCIA',
+    });
+
+    expect(disponibilidad).toEqual({
+      Jueves: ['INCOHERENCIA'],
+    });
   });
 });
 
