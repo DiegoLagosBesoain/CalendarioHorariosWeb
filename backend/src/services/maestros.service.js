@@ -2,7 +2,8 @@ import { obtenerOCrearProfesor } from "./profesores.service.js";
 import pool from "../db/pool.js";
 import {
   esMandante, buscarColumna,
-  limpiarSala, extraerEspecialidades, extraerDisponibilidad
+  limpiarSala, extraerEspecialidades, extraerDisponibilidad,
+  extraerProfesorLab, elegirProfesoresHora
 } from "./maestros-parser.service.js";
 import { crearHorarioProgramable } from "./horas-programables.service.js";
 import { crearPruebaProgramable } from "./pruebas-programables.service.js";
@@ -118,6 +119,10 @@ export async function procesarMaestrosYCrearHorarios(maestrosData, periodo) {
       const ctx = `${codigo}-${seccion}`;
       const prof1 = await obtenerOCrearProfesor(rutProf1 || null, nombreProf1 || null, `prof1 ${ctx}`);
       const prof2 = await obtenerOCrearProfesor(rutProf2 || null, nombreProf2 || null, `prof2 ${ctx}`);
+      const profesorLabData = extraerProfesorLab(curso);
+      const profLab = profesorLabData
+        ? await obtenerOCrearProfesor(profesorLabData.rut, profesorLabData.nombre, `lab ${ctx}`)
+        : null;
 
       const especialidades = extraerEspecialidades(curso);
       const disponibilidad = extraerDisponibilidad(curso);
@@ -139,10 +144,15 @@ export async function procesarMaestrosYCrearHorarios(maestrosData, periodo) {
         );
         const distribucionHorario = distribucionStr ? String(distribucionStr).trim() : null;
         const salaEspecial = limpiarSala(buscarColumna(curso, ...ALIAS_SALA[tipoHora]));
+        const { profesor1Id, profesor2Id } = elegirProfesoresHora(tipoHora, {
+          prof1Id: prof1?.id ?? null,
+          prof2Id: prof2?.id ?? null,
+          profLabId: profLab?.id ?? null,
+        });
 
         await crearHorarioProgramable(
           codigo, seccion, tipoHora, cantidadHoras,
-          especialidades, prof1?.id || null, prof2?.id || null, titulo,
+          especialidades, profesor1Id, profesor2Id, titulo,
           disponibilidad, salaEspecial, distribucionHorario, periodo
         );
 

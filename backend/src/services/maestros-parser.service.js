@@ -55,6 +55,36 @@ export function primerValorNoVacio(...valores) {
   return null;
 }
 
+const ALIAS_RUT_PROFESOR_LAB = [
+  'RUT PROFESOR LABT',
+  'RUT_PROFESOR_LABT',
+  'RUT PROF LABT',
+  'RUT LABT',
+];
+
+const ALIAS_NOMBRE_PROFESOR_LAB = [
+  'NOMBRE PROFESOR LABT',
+  'NOMBRE_PROFESOR_LABT',
+  'PROFESOR LABT',
+  'PROF LABT',
+];
+
+export function extraerProfesorLab(curso) {
+  const rut = String(buscarColumna(curso, ...ALIAS_RUT_PROFESOR_LAB) ?? '').trim();
+  if (!rut) return null;
+
+  const nombre = String(buscarColumna(curso, ...ALIAS_NOMBRE_PROFESOR_LAB) ?? '').trim();
+  return { rut, nombre: nombre || null };
+}
+
+export function elegirProfesoresHora(tipoHora, { prof1Id = null, prof2Id = null, profLabId = null } = {}) {
+  if (tipoHora === 'LAB/TALLER' && profLabId != null) {
+    return { profesor1Id: profLabId, profesor2Id: null };
+  }
+
+  return { profesor1Id: prof1Id ?? null, profesor2Id: prof2Id ?? null };
+}
+
 export function limpiarSala(v) {
   if (v == null) return null;
   const texto = String(v).trim();
